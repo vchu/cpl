@@ -43,7 +43,7 @@
 #include <opencv2/highgui/highgui.hpp>
 
 // PCL
-#include <pcl16/common/pca.h>
+#include <pcl/common/pca.h>
 
 // cpl_visual_features
 #include <cpl_visual_features/helpers.h>
@@ -72,7 +72,7 @@ typedef tabletop_pushing::VisFeedbackPushTrackingGoal PushTrackerGoal;
 typedef tabletop_pushing::VisFeedbackPushTrackingResult PushTrackerResult;
 typedef tabletop_pushing::VisFeedbackPushTrackingAction PushTrackerAction;
 
-typedef pcl16::PointCloud<pcl16::PointXYZ> XYZPointCloud;
+typedef pcl::PointCloud<pcl::PointXYZ> XYZPointCloud;
 
 ObjectTracker25D::ObjectTracker25D(shared_ptr<PointCloudSegmentation> segmenter,
                                    shared_ptr<ArmObjSegmentation> arm_segmenter, int num_downsamples,
@@ -136,7 +136,7 @@ ProtoObject ObjectTracker25D::findTargetObjectGC(cv::Mat& in_frame, XYZPointClou
   }
   ROS_INFO_STREAM("Segmenting arm.");
   cv::Mat segs = arm_segmenter_->segment(in_frame, depth_frame, self_mask, table_mask, init);
-  pcl16::PointIndices obj_pts;
+  pcl::PointIndices obj_pts;
   ROS_INFO_STREAM("Removing table and arm points.");
   // Remove arm and table points from cloud
   for(int i = 0; i < non_table_cloud.size(); ++i)
@@ -168,7 +168,7 @@ ProtoObject ObjectTracker25D::findTargetObjectGC(cv::Mat& in_frame, XYZPointClou
   }
   ROS_INFO_STREAM("Copying object points");
   XYZPointCloud objs_cloud;
-  pcl16::copyPointCloud(non_table_cloud, obj_pts, objs_cloud);
+  pcl::copyPointCloud(non_table_cloud, obj_pts, objs_cloud);
 
   // Cluster objects from remaining point cloud
   ProtoObjects objs;
@@ -580,7 +580,7 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
 #endif // PROFILE_COMPUTE_STATE_TIME
 
       // Match feature points to model
-      pcl16::Correspondences correspondences;
+      pcl::Correspondences correspondences;
 #ifdef USE_RATIO_TEST
       // Setup mask of bad locs to not match to them
       cv::Mat no_match_mask(obj_model_detected.keypoints.size(), obj_feature_point_model_.keypoints.size(),
@@ -610,7 +610,7 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
       {
         if (matches[i][0].distance < ratio_test_thresh_*matches[i][1].distance)
         {
-          correspondences.push_back(pcl16::Correspondence(matches[i][0].trainIdx,
+          correspondences.push_back(pcl::Correspondence(matches[i][0].trainIdx,
                                                           matches[i][0].queryIdx,
                                                           matches[i][0].distance));
         }
@@ -622,15 +622,15 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
       matcher_.match(obj_model_detected.descriptors, obj_feature_point_model_.descriptors, matches);
       for (int i = 0; i < matches.size(); ++i)
       {
-        pcl16::PointXYZ source_pt = obj_feature_point_model_.locations.at(matches[i].trainIdx);
-        pcl16::PointXYZ target_pt = obj_model_detected.locations.at(matches[i].queryIdx);
+        pcl::PointXYZ source_pt = obj_feature_point_model_.locations.at(matches[i].trainIdx);
+        pcl::PointXYZ target_pt = obj_model_detected.locations.at(matches[i].queryIdx);
         if (isnan(source_pt.x) || isnan(source_pt.y) || isnan(source_pt.z) ||
             isnan(target_pt.x) || isnan(target_pt.y) || isnan(target_pt.z))
         {
         }
         else
         {
-          correspondences.push_back(pcl16::Correspondence(matches[i].trainIdx,
+          correspondences.push_back(pcl::Correspondence(matches[i].trainIdx,
                                                           matches[i].queryIdx,
                                                           matches[i].distance));
         }
@@ -754,7 +754,7 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
   if (proxy_name == SPHERE_PROXY)
   {
     XYZPointCloud sphere_cloud;
-    pcl16::ModelCoefficients sphere;
+    pcl::ModelCoefficients sphere;
     pcl_segmenter_->fitSphereRANSAC(cur_obj,sphere_cloud, sphere);
     cv::Mat lbl_img(in_frame.size(), CV_8UC1, cv::Scalar(0));
     cv::Mat disp_img(in_frame.size(), CV_8UC3, cv::Scalar(0,0,0));
@@ -766,7 +766,7 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
     {
       pcl_segmenter_->projectPointCloudIntoImage(sphere_cloud, lbl_img);
       lbl_img*=255;
-      pcl16::PointXYZ centroid_point(sphere.values[0], sphere.values[1], sphere.values[2]);
+      pcl::PointXYZ centroid_point(sphere.values[0], sphere.values[1], sphere.values[2]);
       cv::cvtColor(lbl_img, disp_img, CV_GRAY2BGR);
       const cv::Point img_c_idx = pcl_segmenter_->projectPointIntoImage(
           centroid_point, cur_obj.cloud.header.frame_id, camera_frame_);
@@ -791,7 +791,7 @@ void ObjectTracker25D::computeState(ProtoObject& cur_obj, XYZPointCloud& cloud, 
   if (proxy_name == CYLINDER_PROXY)
   {
     XYZPointCloud cylinder_cloud;
-    pcl16::ModelCoefficients cylinder;
+    pcl::ModelCoefficients cylinder;
     pcl_segmenter_->fitCylinderRANSAC(cur_obj, cylinder_cloud, cylinder);
     cv::Mat lbl_img(in_frame.size(), CV_8UC1, cv::Scalar(0));
     pcl_segmenter_->projectPointCloudIntoImage(cylinder_cloud, lbl_img);
@@ -895,11 +895,11 @@ void ObjectTracker25D::fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect
   // Compute mean
   centroid = Eigen::Vector4f::Zero();
   // ROS_INFO_STREAM("Getting centroid");
-  pcl16::compute3DCentroid(hull_cloud, centroid);
+  pcl::compute3DCentroid(hull_cloud, centroid);
   // Compute demeanished cloud
   Eigen::MatrixXf cloud_demean;
   // ROS_INFO_STREAM("Demenaing point cloud");
-  pcl16::demeanPointCloud(hull_cloud, centroid, cloud_demean);
+  pcl::demeanPointCloud(hull_cloud, centroid, cloud_demean);
 
   // Compute the product cloud_demean * cloud_demean^T
   // ROS_INFO_STREAM("Getting alpha");
@@ -923,7 +923,7 @@ void ObjectTracker25D::fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect
   //   eigen_values = pca.getEigenValues();
   //   ROS_INFO_STREAM("Getting eiven vectors");
   //   eigen_vectors = pca.getEigenVectors();
-  // } catch(pcl16::InitFailedException ife)
+  // } catch(pcl::InitFailedException ife)
   // {
   //   ROS_WARN_STREAM("Failed to compute PCA");
   //   ROS_WARN_STREAM("ife: " << ife.what());
@@ -976,7 +976,7 @@ void ObjectTracker25D::findFootprintBox(ProtoObject& obj, cv::RotatedRect& box)
 
 void ObjectTracker25D::fit2DMassEllipse(ProtoObject& obj, cv::RotatedRect& obj_ellipse)
 {
-  // pcl16::PCA<pcl16::PointXYZ> pca(true);
+  // pcl::PCA<pcl::PointXYZ> pca(true);
   XYZPointCloud cloud_no_z;
   cloud_no_z.header = obj.cloud.header;
   cloud_no_z.width = obj.cloud.points.size();
@@ -1005,11 +1005,11 @@ void ObjectTracker25D::fit2DMassEllipse(ProtoObject& obj, cv::RotatedRect& obj_e
   // Compute mean
   centroid = Eigen::Vector4f::Zero();
   // ROS_INFO_STREAM("Getting centroid");
-  pcl16::compute3DCentroid(cloud_no_z, centroid);
+  pcl::compute3DCentroid(cloud_no_z, centroid);
   // Compute demeanished cloud
   Eigen::MatrixXf cloud_demean;
   // ROS_INFO_STREAM("Demenaing point cloud");
-  pcl16::demeanPointCloud(cloud_no_z, centroid, cloud_demean);
+  pcl::demeanPointCloud(cloud_no_z, centroid, cloud_demean);
 
   // Compute the product cloud_demean * cloud_demean^T
   // ROS_INFO_STREAM("Getting alpha");
@@ -1033,7 +1033,7 @@ void ObjectTracker25D::fit2DMassEllipse(ProtoObject& obj, cv::RotatedRect& obj_e
   //   eigen_values = pca.getEigenValues();
   //   ROS_INFO_STREAM("Getting eiven vectors");
   //   eigen_vectors = pca.getEigenVectors();
-  // } catch(pcl16::InitFailedException ife)
+  // } catch(pcl::InitFailedException ife)
   // {
   //   ROS_WARN_STREAM("Failed to compute PCA");
   //   ROS_WARN_STREAM("ife: " << ife.what());
@@ -1135,7 +1135,7 @@ void ObjectTracker25D::extractFeaturePointModel(cv::Mat& frame, XYZPointCloud& c
 
 bool ObjectTracker25D::estimateFeaturePointTransform(ObjectFeaturePointModel& source_model,
                                                      ObjectFeaturePointModel& target_model,
-                                                     pcl16::Correspondences correspondences,
+                                                     pcl::Correspondences correspondences,
                                                      Eigen::Matrix4f& transform)
 {
   if (correspondences.size() < NUM_RIGID_RANSAC_SAMPLES)
@@ -1159,12 +1159,12 @@ bool ObjectTracker25D::estimateFeaturePointTransform(ObjectFeaturePointModel& so
     sample_indices.push_back(i);
   }
 
-  pcl16::Correspondences inliers;
+  pcl::Correspondences inliers;
   inliers.clear();
   for (int iter = 0; iter < feature_point_max_ransac_iters_; ++iter)
   {
     std::vector<int> available_sample_indices(sample_indices.begin(), sample_indices.end());
-    pcl16::Correspondences samples;
+    pcl::Correspondences samples;
     Eigen::Matrix4f cur_transform;
     for (int i = 0; i < NUM_RIGID_RANSAC_SAMPLES; ++i)
     {
@@ -1177,7 +1177,7 @@ bool ObjectTracker25D::estimateFeaturePointTransform(ObjectFeaturePointModel& so
     feature_point_transform_est_.estimateRigidTransformation(source_model.locations, target_model.locations,
                                                              samples, cur_transform);
     // Check all other pairs for inliears vs outliers
-    pcl16::Correspondences cur_inliers(samples);
+    pcl::Correspondences cur_inliers(samples);
     for (unsigned int i = 0; i < available_sample_indices.size(); ++i)
     {
       int idx = available_sample_indices[i];
@@ -1186,7 +1186,7 @@ bool ObjectTracker25D::estimateFeaturePointTransform(ObjectFeaturePointModel& so
                                 source_model.locations[correspondences[idx].index_query].z,
                                 1.0f);
       Eigen::Vector4f transformed_pt = cur_transform*source_pt;
-      pcl16::PointXYZ target_pt = target_model.locations[correspondences[idx].index_match];
+      pcl::PointXYZ target_pt = target_model.locations[correspondences[idx].index_match];
       // Add correspondence to inlier set if the error is less than the set threshold
       if ( PointCloudSegmentation::sqrDist(target_pt, transformed_pt) < feature_point_inlier_squared_dist_thresh_)
       {
@@ -1443,7 +1443,7 @@ void ObjectTracker25D::trackerDisplay(cv::Mat& in_frame, ProtoObject& cur_obj, c
 {
   cv::Mat centroid_frame;
   in_frame.copyTo(centroid_frame);
-  pcl16::PointXYZ centroid_point(cur_obj.centroid[0], cur_obj.centroid[1],
+  pcl::PointXYZ centroid_point(cur_obj.centroid[0], cur_obj.centroid[1],
                                  cur_obj.centroid[2]);
   const cv::Point img_c_idx = pcl_segmenter_->projectPointIntoImage(
       centroid_point, cur_obj.cloud.header.frame_id, camera_frame_);
@@ -1455,11 +1455,11 @@ void ObjectTracker25D::trackerDisplay(cv::Mat& in_frame, ProtoObject& cur_obj, c
   }
   const float x_min_rad = (std::cos(theta+0.5*M_PI)* obj_ellipse.size.width*0.5);
   const float y_min_rad = (std::sin(theta+0.5*M_PI)* obj_ellipse.size.width*0.5);
-  pcl16::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
+  pcl::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
                                   centroid_point.z);
   const float x_maj_rad = (std::cos(theta)*obj_ellipse.size.height*0.5);
   const float y_maj_rad = (std::sin(theta)*obj_ellipse.size.height*0.5);
-  pcl16::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
+  pcl::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
                                   centroid_point.z);
   const cv::Point2f img_min_idx = pcl_segmenter_->projectPointIntoImage(
       table_min_point, cur_obj.cloud.header.frame_id, camera_frame_);
@@ -1502,7 +1502,7 @@ void ObjectTracker25D::trackerBoxDisplay(cv::Mat& in_frame, ProtoObject& cur_obj
 {
   cv::Mat centroid_frame;
   in_frame.copyTo(centroid_frame);
-  pcl16::PointXYZ centroid_point(cur_obj.centroid[0], cur_obj.centroid[1],
+  pcl::PointXYZ centroid_point(cur_obj.centroid[0], cur_obj.centroid[1],
                                  cur_obj.centroid[2]);
   const cv::Point img_c_idx = pcl_segmenter_->projectPointIntoImage(
       centroid_point, cur_obj.cloud.header.frame_id, camera_frame_);
@@ -1514,11 +1514,11 @@ void ObjectTracker25D::trackerBoxDisplay(cv::Mat& in_frame, ProtoObject& cur_obj
   }
   const float x_min_rad = (std::cos(theta+0.5*M_PI)* obj_ellipse.size.width*0.5);
   const float y_min_rad = (std::sin(theta+0.5*M_PI)* obj_ellipse.size.width*0.5);
-  pcl16::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
+  pcl::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
                                   centroid_point.z);
   const float x_maj_rad = (std::cos(theta)*obj_ellipse.size.height*0.5);
   const float y_maj_rad = (std::sin(theta)*obj_ellipse.size.height*0.5);
-  pcl16::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
+  pcl::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
                                   centroid_point.z);
   const cv::Point2f img_min_idx = pcl_segmenter_->projectPointIntoImage(
       table_min_point, cur_obj.cloud.header.frame_id, camera_frame_);
@@ -1568,7 +1568,7 @@ void ObjectTracker25D::trackerDisplay(cv::Mat& in_frame, PushTrackerState& state
 {
   cv::Mat centroid_frame;
   in_frame.copyTo(centroid_frame);
-  pcl16::PointXYZ centroid_point(state.x.x, state.x.y, state.z);
+  pcl::PointXYZ centroid_point(state.x.x, state.x.y, state.z);
   const cv::Point img_c_idx = pcl_segmenter_->projectPointIntoImage(
       centroid_point, obj.cloud.header.frame_id, camera_frame_);
   double theta = state.x.theta;
@@ -1576,11 +1576,11 @@ void ObjectTracker25D::trackerDisplay(cv::Mat& in_frame, PushTrackerState& state
   // TODO: Change this based on proxy?
   const float x_min_rad = (std::cos(theta+0.5*M_PI)*0.05);
   const float y_min_rad = (std::sin(theta+0.5*M_PI)*0.05);
-  pcl16::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
+  pcl::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
                                   centroid_point.z);
   const float x_maj_rad = (std::cos(theta)*0.15);
   const float y_maj_rad = (std::sin(theta)*0.15);
-  pcl16::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
+  pcl::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
                                   centroid_point.z);
   const cv::Point2f img_min_idx = pcl_segmenter_->projectPointIntoImage(
       table_min_point, obj.cloud.header.frame_id, camera_frame_);

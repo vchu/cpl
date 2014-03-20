@@ -57,21 +57,21 @@
 #include <tf/transform_listener.h>
 
 // PCL
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
-#include <pcl16/common/common.h>
-#include <pcl16/common/eigen.h>
-#include <pcl16/common/centroid.h>
-#include <pcl16/io/io.h>
-#include <pcl16/io/pcd_io.h>
-#include <pcl16_ros/transforms.h>
-#include <pcl16/ros/conversions.h>
-#include <pcl16/ModelCoefficients.h>
-#include <pcl16/registration/transformation_estimation_svd.h>
-#include <pcl16/sample_consensus/method_types.h>
-#include <pcl16/sample_consensus/model_types.h>
-#include <pcl16/segmentation/sac_segmentation.h>
-#include <pcl16/filters/extract_indices.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/common/common.h>
+#include <pcl/common/eigen.h>
+#include <pcl/common/centroid.h>
+#include <pcl/io/io.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/ros/conversions.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/registration/transformation_estimation_svd.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 
 // OpenCV
 #include <opencv2/core/core.hpp>
@@ -451,11 +451,30 @@ class TabletopPushingPerceptionNode
                                      Timer::NANOSECONDS_PER_SECOND);
 #endif
 
+    // create a custom message if needed
+    if (cloud_msg->height == 1){
+        sensor_msgs::PointCloud2 new_cloud_msg;
+        new_cloud_msg.header = cloud_msg->header;
+        new_cloud_msg.height = 480; 
+        new_cloud_msg.width = 640; 
+        new_cloud_msg.fields = cloud_msg->fields;
+        new_cloud_msg.is_bigendian = cloud_msg->is_bigendian;
+        new_cloud_msg.point_step = cloud_msg->point_step;
+        new_cloud_msg.row_step = 20480;
+        new_cloud_msg.data = cloud_msg->data;
+        new_cloud_msg.is_dense = cloud_msg->is_dense;
+
+        pcl::fromROSMsg(new_cloud_msg, cur_point_cloud_);
+
+    } else {
+        pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
+    }    
+
     // Transform point cloud into the correct frame and convert to PCL struct
-    pcl16::fromROSMsg(*cloud_msg, cur_point_cloud_);
+    //pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
     tf_->waitForTransform(workspace_frame_, cloud_msg->header.frame_id, cloud_msg->header.stamp,
                           ros::Duration(0.5));
-    pcl16_ros::transformPointCloud(workspace_frame_, cur_point_cloud_, cur_point_cloud_, *tf_);
+    pcl_ros::transformPointCloud(workspace_frame_, cur_point_cloud_, cur_point_cloud_, *tf_);
 
 #ifdef PROFILE_CB_TIME
     long long filter_start_time = Timer::nanoTime();
@@ -463,7 +482,7 @@ class TabletopPushingPerceptionNode
                                      Timer::NANOSECONDS_PER_SECOND);
 #endif
 
-    pcl16::copyPointCloud(cur_point_cloud_, cur_self_filtered_cloud_);
+    pcl::copyPointCloud(cur_point_cloud_, cur_self_filtered_cloud_);
     for (unsigned int r = 0; r < self_mask.rows; ++r)
     {
       for (unsigned int c = 0; c < self_mask.cols; ++c)
@@ -588,7 +607,7 @@ class TabletopPushingPerceptionNode
           obj_cloud_name_buffer_.push_back(obj_cloud_out_name.str());
 #else // BUFFER_AND_WRITE
           cv::imwrite(image_out_name.str(), cur_color_frame_);
-          pcl16::io::savePCDFile(obj_cloud_out_name.str(), cur_obj.cloud);
+          pcl::io::savePCDFile(obj_cloud_out_name.str(), cur_obj.cloud);
 #endif // BUFFER_AND_WRITE
 
           if (feedback_control_count_ == 0)
@@ -1116,7 +1135,7 @@ class TabletopPushingPerceptionNode
         std::stringstream color_file_name;
         color_file_name << base_output_path_ << req.trial_id << "_color.png";
         current_file_id_ = req.trial_id;
-        pcl16::io::savePCDFile(cloud_file_name.str(), cur_obj.cloud);
+        pcl::io::savePCDFile(cloud_file_name.str(), cur_obj.cloud);
         cv::imwrite(color_file_name.str(), cur_color_frame_);
       }
     }
@@ -1141,7 +1160,7 @@ class TabletopPushingPerceptionNode
       }
       // Get vector through centroid and determine start point and distance
       Eigen::Vector3f push_unit_vec(std::cos(p.push_angle), std::sin(p.push_angle), 0.0f);
-      std::vector<pcl16::PointXYZ> end_points;
+      std::vector<pcl::PointXYZ> end_points;
       pcl_segmenter_->lineCloudIntersectionEndPoints(cur_obj.cloud, push_unit_vec, cur_obj.centroid, end_points);
       p.start_point.x = end_points[0].x;
       p.start_point.y = end_points[0].y;
@@ -1388,7 +1407,7 @@ class TabletopPushingPerceptionNode
 
       // Get initial object boundary location in the current world frame
       ROS_INFO_STREAM("init_obj_point: " << start_loc_history_[0].boundary_loc_);
-      pcl16::PointXYZ init_loc_point = objectPointInWorldFrame(start_loc_history_[0].boundary_loc_, cur_state);
+      pcl::PointXYZ init_loc_point = objectPointInWorldFrame(start_loc_history_[0].boundary_loc_, cur_state);
       ROS_INFO_STREAM("init_loc_point: " << init_loc_point);
 
       // Find index of closest point on current boundary to the initial pushing location
@@ -1452,7 +1471,7 @@ class TabletopPushingPerceptionNode
     // Get descriptor at the chosen location
     // ShapeLocations locs = tabletop_pushing::extractShapeContextFromSamples(hull_cloud, cur_obj,
     //                                                                         use_center_pointing_shape_context_);
-    pcl16::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
+    pcl::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
     ShapeDescriptor sd = tabletop_pushing::extractLocalAndGlobalShapeFeatures(hull_cloud, cur_obj, boundary_loc,
                                                                               boundary_loc_idx, gripper_spread_,
                                                                               hull_alpha_, point_cloud_hist_res_);
@@ -1610,7 +1629,7 @@ class TabletopPushingPerceptionNode
       if (rotate_push || goalPoseValid(goal_pose))
       {
         ROS_INFO_STREAM("Chose push location " << chosen.idx << " with score " << chosen.score);
-        pcl16::PointXYZ selected(hull_cloud_obj[chosen.idx].x, hull_cloud_obj[chosen.idx].y, 0.0);
+        pcl::PointXYZ selected(hull_cloud_obj[chosen.idx].x, hull_cloud_obj[chosen.idx].y, 0.0);
         displayLearnedPushLocScores(pred_push_scores, hull_cloud_obj, selected, rotate_push);
         chosen_score = chosen.score;
         return loc;
@@ -1686,7 +1705,7 @@ class TabletopPushingPerceptionNode
       ShapeDescriptor sd;
       return sd;
     }
-    pcl16::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
+    pcl::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
 #ifdef DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY
     cv::Mat hull_img(cur_color_frame_.size(), CV_8UC1, cv::Scalar(0));
     pcl_segmenter_->projectPointCloudIntoImage(hull_cloud, hull_img);
@@ -1813,7 +1832,7 @@ class TabletopPushingPerceptionNode
     return best_k;
   }
 
-  std::vector<pcl16::PointXYZ> findAxisAlignedBoundingBox(PushTrackerState& cur_state, ProtoObject& cur_obj)
+  std::vector<pcl::PointXYZ> findAxisAlignedBoundingBox(PushTrackerState& cur_state, ProtoObject& cur_obj)
   {
     // Get cloud in object frame
     XYZPointCloud object_frame_cloud;
@@ -1842,11 +1861,11 @@ class TabletopPushingPerceptionNode
         max_y = object_frame_cloud[i].y;
       }
     }
-    std::vector<pcl16::PointXYZ> vertices;
-    vertices.push_back(objectPointInWorldFrame(pcl16::PointXYZ(max_x, max_y, 0.0), cur_state));
-    vertices.push_back(objectPointInWorldFrame(pcl16::PointXYZ(max_x, min_y, 0.0), cur_state));
-    vertices.push_back(objectPointInWorldFrame(pcl16::PointXYZ(min_x, min_y, 0.0), cur_state));
-    vertices.push_back(objectPointInWorldFrame(pcl16::PointXYZ(min_x, max_y, 0.0), cur_state));
+    std::vector<pcl::PointXYZ> vertices;
+    vertices.push_back(objectPointInWorldFrame(pcl::PointXYZ(max_x, max_y, 0.0), cur_state));
+    vertices.push_back(objectPointInWorldFrame(pcl::PointXYZ(max_x, min_y, 0.0), cur_state));
+    vertices.push_back(objectPointInWorldFrame(pcl::PointXYZ(min_x, min_y, 0.0), cur_state));
+    vertices.push_back(objectPointInWorldFrame(pcl::PointXYZ(min_x, max_y, 0.0), cur_state));
     return vertices;
   }
 
@@ -1856,7 +1875,7 @@ class TabletopPushingPerceptionNode
     // cv::Point2f vertices[4];
     // bounding_box.points(vertices);
 
-    std::vector<pcl16::PointXYZ> vertices = findAxisAlignedBoundingBox(cur_state, cur_obj);
+    std::vector<pcl::PointXYZ> vertices = findAxisAlignedBoundingBox(cur_state, cur_obj);
     double min_dist = FLT_MAX;
     int chosen_idx = 0;
     float push_angle_world_frame = 0.0;
@@ -1977,34 +1996,34 @@ class TabletopPushingPerceptionNode
     }
   }
 
-  pcl16::PointXYZ worldPointInObjectFrame(pcl16::PointXYZ world_pt, PushTrackerState& cur_state)
+  pcl::PointXYZ worldPointInObjectFrame(pcl::PointXYZ world_pt, PushTrackerState& cur_state)
   {
     // Center on object frame
-    pcl16::PointXYZ shifted_pt;
+    pcl::PointXYZ shifted_pt;
     shifted_pt.x = world_pt.x - cur_state.x.x;
     shifted_pt.y = world_pt.y - cur_state.x.y;
     shifted_pt.z = world_pt.z - cur_state.z;
     double ct = cos(cur_state.x.theta);
     double st = sin(cur_state.x.theta);
     // Rotate into correct frame
-    pcl16::PointXYZ obj_pt;
+    pcl::PointXYZ obj_pt;
     obj_pt.x =  ct*shifted_pt.x + st*shifted_pt.y;
     obj_pt.y = -st*shifted_pt.x + ct*shifted_pt.y;
     obj_pt.z = shifted_pt.z; // NOTE: Currently assume 2D motion
     return obj_pt;
   }
 
-  pcl16::PointXYZ objectPointInWorldFrame(pcl16::PointXYZ obj_pt, PushTrackerState& cur_state)
+  pcl::PointXYZ objectPointInWorldFrame(pcl::PointXYZ obj_pt, PushTrackerState& cur_state)
   {
     // Rotate out of object frame
-    pcl16::PointXYZ rotated_pt;
+    pcl::PointXYZ rotated_pt;
     double ct = cos(cur_state.x.theta);
     double st = sin(cur_state.x.theta);
     rotated_pt.x = ct*obj_pt.x - st*obj_pt.y;
     rotated_pt.y = st*obj_pt.x + ct*obj_pt.y;
     rotated_pt.z = obj_pt.z;  // NOTE: Currently assume 2D motion
     // Shift to world frame
-    pcl16::PointXYZ world_pt;
+    pcl::PointXYZ world_pt;
     world_pt.x = rotated_pt.x + cur_state.x.x;
     world_pt.y = rotated_pt.y + cur_state.x.y;
     world_pt.z = rotated_pt.z + cur_state.z;
@@ -2377,13 +2396,13 @@ class TabletopPushingPerceptionNode
     float circ_size = 1.0;
     const float x_maj_rad = (std::cos(theta)*circ_size*0.5);
     const float y_maj_rad = (std::sin(theta)*circ_size*0.5);
-    pcl16::PointXYZ table_heading_point(centroid.point.x+x_maj_rad, centroid.point.y+y_maj_rad,
+    pcl::PointXYZ table_heading_point(centroid.point.x+x_maj_rad, centroid.point.y+y_maj_rad,
                                       centroid.point.z);
     const cv::Point2f img_maj_idx = pcl_segmenter_->projectPointIntoImage(
         table_heading_point, centroid.header.frame_id, camera_frame_);
     const float goal_x_rad = (std::cos(goal_theta)*circ_size*0.5);
     const float goal_y_rad = (std::sin(goal_theta)*circ_size*0.5);
-    pcl16::PointXYZ goal_heading_point(centroid.point.x+goal_x_rad, centroid.point.y+goal_y_rad,
+    pcl::PointXYZ goal_heading_point(centroid.point.x+goal_x_rad, centroid.point.y+goal_y_rad,
                                      centroid.point.z);
     cv::Point2f img_goal_idx = pcl_segmenter_->projectPointIntoImage(
         goal_heading_point, centroid.header.frame_id, camera_frame_);
@@ -2447,7 +2466,7 @@ class TabletopPushingPerceptionNode
     }
   }
 
-  void displayLearnedPushLocScores(std::vector<double>& push_scores, XYZPointCloud& locs, pcl16::PointXYZ selected,
+  void displayLearnedPushLocScores(std::vector<double>& push_scores, XYZPointCloud& locs, pcl::PointXYZ selected,
                                    bool rotate_push)
   {
     double max_y = 0.2;
@@ -2519,7 +2538,7 @@ class TabletopPushingPerceptionNode
     for (int i = 0; i < color_img_buffer_.size(); ++i)
     {
       cv::imwrite(color_img_name_buffer_[i], color_img_buffer_[i]);
-      pcl16::io::savePCDFileBinary<pcl16::PointXYZ>(obj_cloud_name_buffer_[i], obj_cloud_buffer_[i]);
+      pcl::io::savePCDFileBinary<pcl::PointXYZ>(obj_cloud_name_buffer_[i], obj_cloud_buffer_[i]);
     }
     for (int i = 0; i < workspace_transform_buffer_.size(); ++i)
     {
@@ -2647,7 +2666,7 @@ class TabletopPushingPerceptionNode
   int footprint_count_;
   int feedback_control_count_;
   int feedback_control_instance_count_;
-  pcl16::PointXYZ nan_point_;
+  pcl::PointXYZ nan_point_;
   bool open_loop_push_;
 #ifdef DEBUG_POSE_ESTIMATION
   std::ofstream pose_est_stream_;

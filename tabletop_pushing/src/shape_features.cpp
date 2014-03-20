@@ -2,12 +2,12 @@
 #include <iostream>
 #include <fstream>
 #include <tabletop_pushing/shape_features.h>
-#include <pcl16_ros/transforms.h>
-#include <pcl16/ros/conversions.h>
-#include <pcl16/surface/concave_hull.h>
-#include <pcl16/common/pca.h>
-// #include <pcl16/registration/transformation_estimation_svd.h>
-#include <pcl16/registration/transformation_estimation_lm.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/ros/conversions.h>
+#include <pcl/surface/concave_hull.h>
+#include <pcl/common/pca.h>
+// #include <pcl/registration/transformation_estimation_svd.h>
+#include <pcl/registration/transformation_estimation_lm.h>
 #include <cpl_visual_features/comp_geometry.h>
 #include <cpl_visual_features/helpers.h>
 #include <iostream>
@@ -43,7 +43,7 @@ inline int objLocToIdx(double val, double min_val, double max_val)
   return round((val-min_val)/XY_RES);
 }
 
-cv::Point worldPtToImgPt(pcl16::PointXYZ world_pt, double min_x, double max_x,
+cv::Point worldPtToImgPt(pcl::PointXYZ world_pt, double min_x, double max_x,
                          double min_y, double max_y)
 {
   cv::Point img_pt(worldLocToIdx(world_pt.x, min_x, max_x),
@@ -51,17 +51,17 @@ cv::Point worldPtToImgPt(pcl16::PointXYZ world_pt, double min_x, double max_x,
   return img_pt;
 }
 
-pcl16::PointXYZ worldPointInObjectFrame(pcl16::PointXYZ world_pt, PushTrackerState& cur_state)
+pcl::PointXYZ worldPointInObjectFrame(pcl::PointXYZ world_pt, PushTrackerState& cur_state)
 {
   // Center on object frame
-  pcl16::PointXYZ shifted_pt;
+  pcl::PointXYZ shifted_pt;
   shifted_pt.x = world_pt.x - cur_state.x.x;
   shifted_pt.y = world_pt.y - cur_state.x.y;
   shifted_pt.z = world_pt.z - cur_state.z;
   double ct = cos(cur_state.x.theta);
   double st = sin(cur_state.x.theta);
   // Rotate into correct frame
-  pcl16::PointXYZ obj_pt;
+  pcl::PointXYZ obj_pt;
   obj_pt.x =  ct*shifted_pt.x + st*shifted_pt.y;
   obj_pt.y = -st*shifted_pt.x + ct*shifted_pt.y;
   obj_pt.z = shifted_pt.z; // NOTE: Currently assume 2D motion
@@ -102,7 +102,7 @@ XYZPointCloud getObjectBoundarySamples(ProtoObject& cur_obj, double hull_alpha)
 
   // TODO: Examine sensitivity of hull_alpha...
   XYZPointCloud hull_cloud;
-  pcl16::ConcaveHull<pcl16::PointXYZ> hull;
+  pcl::ConcaveHull<pcl::PointXYZ> hull;
   hull.setDimension(2);  // NOTE: Get 2D projection of object
   hull.setInputCloud(footprint_cloud.makeShared());
   hull.setAlpha(hull_alpha);
@@ -174,7 +174,7 @@ void estimateTransformFromMatches(XYZPointCloud& cloud_t_0, XYZPointCloud& cloud
     }
   }
   ROS_INFO_STREAM("Path had " << p.size() << " matches.\tNow have " << source_indices.size() << " matches.");
-  pcl16::registration::TransformationEstimationLM<pcl16::PointXYZ, pcl16::PointXYZ> tlm;
+  pcl::registration::TransformationEstimationLM<pcl::PointXYZ, pcl::PointXYZ> tlm;
   tlm.estimateRigidTransformation(cloud_t_0, source_indices, cloud_t_1, target_indices, transform);
 }
 
@@ -208,7 +208,7 @@ void visualizeObjectBoundarySamples(XYZPointCloud& hull_cloud, PushTrackerState&
   cv::Point prev_img_pt, init_img_pt;
   for (int i = 0; i < hull_cloud.size(); ++i)
   {
-    pcl16::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud[i], cur_state);
+    pcl::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud[i], cur_state);
     cv::Point img_pt(cols - objLocToIdx(obj_pt.x, min_x, max_x), objLocToIdx(obj_pt.y, min_y, max_y));
     cv::circle(footprint, img_pt, 1, kuler_blue, 3);
     if (i > 0)
@@ -244,11 +244,11 @@ cv::Mat visualizeObjectBoundaryMatches(XYZPointCloud& hull_a, XYZPointCloud& hul
 
   for (int i = 0; i < hull_a.size(); ++i)
   {
-    pcl16::PointXYZ start_point_world = hull_a[i];
-    pcl16::PointXYZ end_point_world = hull_b[path[i]];
+    pcl::PointXYZ start_point_world = hull_a[i];
+    pcl::PointXYZ end_point_world = hull_b[path[i]];
     // Transform to display frame
-    pcl16::PointXYZ start_point_obj = worldPointInObjectFrame(start_point_world, cur_state);
-    pcl16::PointXYZ end_point_obj = worldPointInObjectFrame(end_point_world, cur_state);
+    pcl::PointXYZ start_point_obj = worldPointInObjectFrame(start_point_world, cur_state);
+    pcl::PointXYZ end_point_obj = worldPointInObjectFrame(end_point_world, cur_state);
     cv::Point start_point(cols - objLocToIdx(start_point_obj.x, min_x, max_x),
                           objLocToIdx(start_point_obj.y, min_y, max_y));
     cv::Point end_point(cols - objLocToIdx(end_point_obj.x, min_x, max_x),
@@ -271,7 +271,7 @@ cv::Mat visualizeObjectBoundaryMatches(XYZPointCloud& hull_a, XYZPointCloud& hul
 }
 
 cv::Mat visualizeObjectContactLocation(XYZPointCloud& hull_cloud, PushTrackerState& cur_state,
-                                       pcl16::PointXYZ& tool_pt0, pcl16::PointXYZ& tool_pt1)
+                                       pcl::PointXYZ& tool_pt0, pcl::PointXYZ& tool_pt1)
 {
   double max_y = 0.2;
   double min_y = -0.2;
@@ -279,16 +279,16 @@ cv::Mat visualizeObjectContactLocation(XYZPointCloud& hull_cloud, PushTrackerSta
   double min_x = -0.2;
   cv::Mat footprint = visualizeObjectBoundarySamples(hull_cloud, cur_state);
 
-  pcl16::PointXYZ contact_pt_world = estimateObjectContactLocation(hull_cloud, cur_state,
+  pcl::PointXYZ contact_pt_world = estimateObjectContactLocation(hull_cloud, cur_state,
                                                                    tool_pt0, tool_pt1);
-  pcl16::PointXYZ contact_pt_obj =  worldPointInObjectFrame(contact_pt_world, cur_state);
+  pcl::PointXYZ contact_pt_obj =  worldPointInObjectFrame(contact_pt_world, cur_state);
   int img_contact_pt_x = footprint.cols - objLocToIdx(contact_pt_obj.x, min_x, max_x);
   int img_contact_pt_y = objLocToIdx(contact_pt_obj.y, min_y, max_y);
 
-  pcl16::PointXYZ tool_pt_obj0 =  worldPointInObjectFrame(tool_pt0, cur_state);
+  pcl::PointXYZ tool_pt_obj0 =  worldPointInObjectFrame(tool_pt0, cur_state);
   int img_x0 = footprint.cols - objLocToIdx(tool_pt_obj0.x, min_x, max_x);
   int img_y0 = objLocToIdx(tool_pt_obj0.y, min_y, max_y);
-  pcl16::PointXYZ tool_pt_obj1 =  worldPointInObjectFrame(tool_pt1, cur_state);
+  pcl::PointXYZ tool_pt_obj1 =  worldPointInObjectFrame(tool_pt1, cur_state);
   int img_x1 = footprint.cols - objLocToIdx(tool_pt_obj1.x, min_x, max_x);
   int img_y1 = objLocToIdx(tool_pt_obj1.y, min_y, max_y);
   cv::Scalar color(0, 0, 128);
@@ -299,7 +299,7 @@ cv::Mat visualizeObjectContactLocation(XYZPointCloud& hull_cloud, PushTrackerSta
   return footprint;
 }
 
-cv::Mat getObjectFootprint(cv::Mat obj_mask, pcl16::PointCloud<pcl16::PointXYZ>& cloud)
+cv::Mat getObjectFootprint(cv::Mat obj_mask, pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
   cv::Mat kernel(5,5,CV_8UC1, 255);
   cv::Mat obj_mask_target;
@@ -433,11 +433,11 @@ cv::Mat makeHistogramImage(ShapeDescriptor histogram, int n_x_bins, int n_y_bins
   // cv::waitKey();
   return hist_img;
 }
-void drawSamplePoints(XYZPointCloud& hull, XYZPointCloud& samples, double alpha, pcl16::PointXYZ& center_pt,
-                      pcl16::PointXYZ& sample_pt, pcl16::PointXYZ& approach_pt,
-                      pcl16::PointXYZ e_left, pcl16::PointXYZ e_right,
-                      pcl16::PointXYZ c_left, pcl16::PointXYZ c_right,
-                      pcl16::PointXYZ i_left, pcl16::PointXYZ i_right,
+void drawSamplePoints(XYZPointCloud& hull, XYZPointCloud& samples, double alpha, pcl::PointXYZ& center_pt,
+                      pcl::PointXYZ& sample_pt, pcl::PointXYZ& approach_pt,
+                      pcl::PointXYZ e_left, pcl::PointXYZ e_right,
+                      pcl::PointXYZ c_left, pcl::PointXYZ c_right,
+                      pcl::PointXYZ i_left, pcl::PointXYZ i_right,
                       double x_res, double y_res, double x_range, double y_range, ProtoObject& cur_obj)
 {
   double max_y = 0.5;
@@ -465,8 +465,8 @@ void drawSamplePoints(XYZPointCloud& hull, XYZPointCloud& samples, double alpha,
     {
       continue;
     }
-    pcl16::PointXYZ obj_pt0 = hull[i];
-    pcl16::PointXYZ obj_pt1 = hull[j];
+    pcl::PointXYZ obj_pt0 = hull[i];
+    pcl::PointXYZ obj_pt1 = hull[j];
     cv::Point img_pt0 = worldPtToImgPt(obj_pt0, min_x, max_x, min_y, max_y);
     cv::Point img_pt1 = worldPtToImgPt(obj_pt1, min_x, max_x, min_y, max_y);
     cv::Scalar color(0, 0, 128);
@@ -528,7 +528,7 @@ void drawSamplePoints(XYZPointCloud& hull, XYZPointCloud& samples, double alpha,
       double local_y = min_hist_y+y_res*j;
 
       // Transform into world frame
-      pcl16::PointXYZ corner_in_world;
+      pcl::PointXYZ corner_in_world;
       corner_in_world.x = (local_x*ct - local_y*st ) + sample_pt.x;
       corner_in_world.y = (local_x*st + local_y*ct ) + sample_pt.y;
       // Transform into image frame
@@ -576,23 +576,23 @@ void drawSamplePoints(XYZPointCloud& hull, XYZPointCloud& samples, double alpha,
 
 }
 
-XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::PointXYZ sample_pt,
+XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl::PointXYZ sample_pt,
                               double sample_spread, double alpha)
 {
   // TODO: This is going to get all points in front of the gripper, not only those on the close boundary
   double radius = sample_spread / 2.0;
-  pcl16::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
+  pcl::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
   double center_angle = std::atan2(center_pt.y - sample_pt.y, center_pt.x - sample_pt.x);
   double approach_dist = 0.05;
-  pcl16::PointXYZ approach_pt(sample_pt.x - std::cos(center_angle)*approach_dist,
+  pcl::PointXYZ approach_pt(sample_pt.x - std::cos(center_angle)*approach_dist,
                               sample_pt.y - std::sin(center_angle)*approach_dist, 0.0);
-  pcl16::PointXYZ e_vect(std::cos(center_angle+M_PI/2.0)*radius,
+  pcl::PointXYZ e_vect(std::cos(center_angle+M_PI/2.0)*radius,
                          std::sin(center_angle+M_PI/2.0)*radius, 0.0);
-  pcl16::PointXYZ e_left(approach_pt.x + e_vect.x, approach_pt.y + e_vect.y, 0.0);
-  pcl16::PointXYZ e_right(approach_pt.x - e_vect.x, approach_pt.y - e_vect.y, 0.0);
-  pcl16::PointXYZ c_left(center_pt.x + std::cos(center_angle)*approach_dist + e_vect.x,
+  pcl::PointXYZ e_left(approach_pt.x + e_vect.x, approach_pt.y + e_vect.y, 0.0);
+  pcl::PointXYZ e_right(approach_pt.x - e_vect.x, approach_pt.y - e_vect.y, 0.0);
+  pcl::PointXYZ c_left(center_pt.x + std::cos(center_angle)*approach_dist + e_vect.x,
                          center_pt.y + std::sin(center_angle)*approach_dist + e_vect.y, 0.0);
-  pcl16::PointXYZ c_right(center_pt.x + std::cos(center_angle)*approach_dist - e_vect.x,
+  pcl::PointXYZ c_right(center_pt.x + std::cos(center_angle)*approach_dist - e_vect.x,
                           center_pt.y + std::sin(center_angle)*approach_dist - e_vect.y, 0.0);
   std::vector<int> jump_indices = getJumpIndices(hull, alpha);
 
@@ -603,7 +603,7 @@ XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl1
     double dist_l = pointLineDistance2D(cur_obj.cloud[i], e_left, c_left);
     if (dist_r > sample_spread  || dist_l > sample_spread)
     {
-      // pcl16::PointXYZ intersection;
+      // pcl::PointXYZ intersection;
       // bool intersects_l = lineSegmentIntersection2D(hull[i], hull[(i+1)%hull.size()], e_left, c_left,
       //                                               intersection);
       // bool intersects_r = lineSegmentIntersection2D(hull[i], hull[(i+1)%hull.size()], e_right, c_right,
@@ -625,9 +625,9 @@ XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl1
     const int idx = inside_indices[i];
     // Get projection of this point in gripper y
     double dist_l = pointLineDistance2D(cur_obj.cloud[idx], e_left, c_left);
-    pcl16::PointXYZ e_vect_scaled(std::cos(center_angle+M_PI/2.0)*radius-dist_l,
+    pcl::PointXYZ e_vect_scaled(std::cos(center_angle+M_PI/2.0)*radius-dist_l,
                                   std::sin(center_angle+M_PI/2.0)*radius-dist_l, 0.0);
-    pcl16::PointXYZ e_pt(approach_pt.x + e_vect.x, approach_pt.y + e_vect.y, 0.0);
+    pcl::PointXYZ e_pt(approach_pt.x + e_vect.x, approach_pt.y + e_vect.y, 0.0);
 
     // Check if the line segment between the gripper and this point intersects any other line segment
     bool intersects = false;
@@ -648,7 +648,7 @@ XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl1
       // }
 
       // Do the line test
-      pcl16::PointXYZ intersection;
+      pcl::PointXYZ intersection;
       if (lineSegmentIntersection2D(e_pt, cur_obj.cloud[idx], hull[j], hull[(j+1)%hull.size()], intersection))
       {
         intersects = true;
@@ -663,7 +663,7 @@ XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl1
 
   // Copy to new cloud and return
   XYZPointCloud local_samples;
-  pcl16::copyPointCloud(cur_obj.cloud, local_indices, local_samples);
+  pcl::copyPointCloud(cur_obj.cloud, local_indices, local_samples);
   int min_l_idx = 0;
   int min_r_idx = 0;
   // drawSamplePoints(hull, local_samples, center_pt, sample_pt, approach_pt, e_left, e_right,
@@ -673,23 +673,23 @@ XYZPointCloud getLocalSamplesNew(XYZPointCloud& hull, ProtoObject& cur_obj, pcl1
   return local_samples;
 }
 
-XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::PointXYZ sample_pt,
+XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl::PointXYZ sample_pt,
                                  double sample_spread, double alpha)
 {
   // TODO: This is going to get all points in front of the gripper, not only those on the close boundary
   double radius = sample_spread / 2.0;
-  pcl16::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
+  pcl::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
   double center_angle = std::atan2(center_pt.y - sample_pt.y, center_pt.x - sample_pt.x);
   double approach_dist = 0.05;
-  pcl16::PointXYZ approach_pt(sample_pt.x - std::cos(center_angle)*approach_dist,
+  pcl::PointXYZ approach_pt(sample_pt.x - std::cos(center_angle)*approach_dist,
                               sample_pt.y - std::sin(center_angle)*approach_dist, 0.0);
-  pcl16::PointXYZ e_vect(std::cos(center_angle+M_PI/2.0)*radius,
+  pcl::PointXYZ e_vect(std::cos(center_angle+M_PI/2.0)*radius,
                          std::sin(center_angle+M_PI/2.0)*radius, 0.0);
-  pcl16::PointXYZ e_left(sample_pt.x + e_vect.x, sample_pt.y + e_vect.y, 0.0);
-  pcl16::PointXYZ e_right(sample_pt.x - e_vect.x, sample_pt.y - e_vect.y, 0.0);
-  pcl16::PointXYZ c_left(center_pt.x + std::cos(center_angle)*approach_dist + e_vect.x,
+  pcl::PointXYZ e_left(sample_pt.x + e_vect.x, sample_pt.y + e_vect.y, 0.0);
+  pcl::PointXYZ e_right(sample_pt.x - e_vect.x, sample_pt.y - e_vect.y, 0.0);
+  pcl::PointXYZ c_left(center_pt.x + std::cos(center_angle)*approach_dist + e_vect.x,
                          center_pt.y + std::sin(center_angle)*approach_dist + e_vect.y, 0.0);
-  pcl16::PointXYZ c_right(center_pt.x + std::cos(center_angle)*approach_dist - e_vect.x,
+  pcl::PointXYZ c_right(center_pt.x + std::cos(center_angle)*approach_dist - e_vect.x,
                           center_pt.y + std::sin(center_angle)*approach_dist - e_vect.y, 0.0);
   // ROS_INFO_STREAM("center_pt: " << center_pt);
   // ROS_INFO_STREAM("sample_pt: " << sample_pt);
@@ -718,9 +718,9 @@ XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::
   }
 
   // Test intersection of gripper end point rays and all line segments on the object boundary
-  pcl16::PointXYZ l_intersection;
-  pcl16::PointXYZ r_intersection;
-  pcl16::PointXYZ c_intersection;
+  pcl::PointXYZ l_intersection;
+  pcl::PointXYZ r_intersection;
+  pcl::PointXYZ c_intersection;
   double min_l_dist = FLT_MAX;
   double min_r_dist = FLT_MAX;
   double min_c_dist = FLT_MAX;
@@ -767,7 +767,7 @@ XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::
       continue;
     }
 
-    pcl16::PointXYZ intersection;
+    pcl::PointXYZ intersection;
     // LEFT INTERSECTION
     if (lineSegmentIntersection2D(hull[idx0], hull[idx1], e_left, c_left, intersection))
     {
@@ -902,7 +902,7 @@ XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::
 
   // Copy to new cloud and return
   XYZPointCloud local_samples;
-  pcl16::copyPointCloud(hull, indices, local_samples);
+  pcl::copyPointCloud(hull, indices, local_samples);
   double x_res = 0.01, y_res=0.01, x_range=2.0*sample_spread, y_range=2.0*sample_spread;
   drawSamplePoints(hull, local_samples, alpha, center_pt, sample_pt, approach_pt, e_left, e_right,
                    c_left, c_right, hull[min_l_idx], hull[min_r_idx], x_res, y_res, x_range, y_range, cur_obj);
@@ -910,15 +910,15 @@ XYZPointCloud getLocalSamples(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::
 }
 
 XYZPointCloud transformSamplesIntoSampleLocFrame(XYZPointCloud& samples, ProtoObject& cur_obj,
-                                                 pcl16::PointXYZ sample_pt)
+                                                 pcl::PointXYZ sample_pt)
 {
   XYZPointCloud samples_transformed(samples);
-  pcl16::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
+  pcl::PointXYZ center_pt(cur_obj.centroid[0], cur_obj.centroid[1], cur_obj.centroid[2]);
   double center_angle = std::atan2(center_pt.y - sample_pt.y, center_pt.x - sample_pt.x);
   for (int i = 0; i < samples.size(); ++i)
   {
     // Remove mean and rotate based on pushing_direction
-    pcl16::PointXYZ demeaned(samples[i].x - sample_pt.x, samples[i].y - sample_pt.y, samples[i].z);
+    pcl::PointXYZ demeaned(samples[i].x - sample_pt.x, samples[i].y - sample_pt.y, samples[i].z);
     double ct = std::cos(center_angle);
     double st = std::sin(center_angle);
     samples_transformed[i].x =  ct*demeaned.x + st*demeaned.y;
@@ -1001,10 +1001,10 @@ void getPointRangesXY(XYZPointCloud& samples, ShapeDescriptor& sd)
 void getCovarianceXYFromPoints(XYZPointCloud& pts, ShapeDescriptor& sd)
 {
   Eigen::Matrix<float, 4, 1> centroid;
-  if(pcl16::compute3DCentroid(pts, centroid) != 0)
+  if(pcl::compute3DCentroid(pts, centroid) != 0)
   {
     Eigen::Matrix3f covariance;
-    if(pcl16::computeCovarianceMatrix(pts, centroid, covariance) != 0)
+    if(pcl::computeCovarianceMatrix(pts, centroid, covariance) != 0)
     {
       std::stringstream disp_stream;
       for (int i = 0; i < 2; ++i)
@@ -1038,7 +1038,7 @@ void getCovarianceXYFromPoints(XYZPointCloud& pts, ShapeDescriptor& sd)
 
 void extractPCAFeaturesXY(XYZPointCloud& samples, ShapeDescriptor& sd)
 {
-  pcl16::PCA<pcl16::PointXYZ> pca;
+  pcl::PCA<pcl::PointXYZ> pca;
   pca.setInputCloud(samples.makeShared());
   Eigen::Vector3f eigen_values = pca.getEigenValues();
   Eigen::Matrix3f eigen_vectors = pca.getEigenVectors();
@@ -1077,7 +1077,7 @@ void extractBoundingBoxFeatures(XYZPointCloud& samples, ShapeDescriptor& sd)
 }
 
 ShapeDescriptor extractLocalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                          pcl16::PointXYZ sample_pt, double sample_spread, double hull_alpha,
+                                          pcl::PointXYZ sample_pt, double sample_spread, double hull_alpha,
                                           double hist_res)
 {
   XYZPointCloud local_samples = getLocalSamples(hull, cur_obj, sample_pt, sample_spread, hull_alpha);
@@ -1102,7 +1102,7 @@ ShapeDescriptor extractLocalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_
 
 
 
-ShapeDescriptor extractGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj, pcl16::PointXYZ sample_pt,
+ShapeDescriptor extractGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj, pcl::PointXYZ sample_pt,
                                            int sample_pt_idx, double sample_spread)
 {
   XYZPointCloud transformed_pts = transformSamplesIntoSampleLocFrame(cur_obj.cloud, cur_obj, sample_pt);
@@ -1150,7 +1150,7 @@ ShapeDescriptors extractLocalAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoOb
 }
 
 ShapeDescriptor extractLocalAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                                   pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                                   pcl::PointXYZ sample_pt, int sample_pt_idx,
                                                    double sample_spread, double hull_alpha, double hist_res,
                                                    bool binarize_and_normalize)
 {
@@ -1279,7 +1279,7 @@ ShapeDescriptor extractLocalAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObj
 }
 
 ShapeDescriptor extractHKSAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                                 pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                                 pcl::PointXYZ sample_pt, int sample_pt_idx,
                                                  double sample_spread, double hull_alpha, double hist_res)
 {
   ShapeDescriptor local = extractHKSDescriptor(hull, cur_obj, sample_pt, sample_pt_idx,
@@ -1587,8 +1587,8 @@ cv::Mat computeChi2Kernel(ShapeDescriptors& sds, std::string feat_path, int loca
   return K;
 }
 
-pcl16::PointXYZ estimateObjectContactLocation(XYZPointCloud& hull_cloud, PushTrackerState& cur_state,
-                                              pcl16::PointXYZ& tool_pt0, pcl16::PointXYZ& tool_pt1)
+pcl::PointXYZ estimateObjectContactLocation(XYZPointCloud& hull_cloud, PushTrackerState& cur_state,
+                                              pcl::PointXYZ& tool_pt0, pcl::PointXYZ& tool_pt1)
 {
   double min_dist = FLT_MAX;
   int min_idx = -1;
@@ -1638,7 +1638,7 @@ XYZPointCloud laplacianSmoothBoundary(XYZPointCloud& hull_cloud, int m)
   smoothed_cloud.resize(smoothed_cloud.width);
   for (int i = 0; i < n; ++i)
   {
-    smoothed_cloud.at(i) = pcl16::PointXYZ(X_hat(i,0), X_hat(i,1), X_hat(i,2));
+    smoothed_cloud.at(i) = pcl::PointXYZ(X_hat(i,0), X_hat(i,1), X_hat(i,2));
   }
   return smoothed_cloud;
 }
@@ -1680,7 +1680,7 @@ XYZPointCloud laplacianBoundaryCompression(XYZPointCloud& hull_cloud, int k)
   compressed_cloud.resize(compressed_cloud.width);
   for (int i = 0; i < n; ++i)
   {
-    compressed_cloud.at(i) = pcl16::PointXYZ(X_hat(i,0), X_hat(i,1), X_hat(i,2));
+    compressed_cloud.at(i) = pcl::PointXYZ(X_hat(i,0), X_hat(i,1), X_hat(i,2));
   }
   return compressed_cloud;
 }
@@ -1721,7 +1721,7 @@ std::vector<XYZPointCloud> laplacianBoundaryCompressionAllKs(XYZPointCloud& hull
     compressed_cloud.resize(compressed_cloud.width);
     for (int j = 0; j < n; ++j)
     {
-      compressed_cloud.at(j) = pcl16::PointXYZ(X_hat(j,0), X_hat(j,1), X_hat(j,2));
+      compressed_cloud.at(j) = pcl::PointXYZ(X_hat(j,0), X_hat(j,1), X_hat(j,2));
     }
     clouds.push_back(compressed_cloud);
   }
@@ -1729,7 +1729,7 @@ std::vector<XYZPointCloud> laplacianBoundaryCompressionAllKs(XYZPointCloud& hull
 }
 
 ShapeDescriptor extractHKSDescriptor(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                     pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                     pcl::PointXYZ sample_pt, int sample_pt_idx,
                                      double sample_spread, double hull_alpha, double hist_res)
 {
   cv::Mat K_xx = extractHeatKernelSignatures(hull);
@@ -1861,7 +1861,7 @@ cv::Mat visualizeHKSDists(XYZPointCloud& hull_cloud, cv::Mat K_xx, PushTrackerSt
   int prev_img_y;
   for (int i = 0; i < hull_cloud.size(); ++i)
   {
-    pcl16::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud[i], cur_state);
+    pcl::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud[i], cur_state);
     int img_x = cols - objLocToIdx(obj_pt.x, min_x, max_x);
     int img_y = objLocToIdx(obj_pt.y, min_y, max_y);
     if (i == target_idx) // Circle target index location

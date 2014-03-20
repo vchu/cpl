@@ -13,9 +13,9 @@
 #include <geometry_msgs/PointStamped.h>
 
 // PCL
-#include <pcl16/io/io.h>
-#include <pcl16/io/pcd_io.h>
-#include <pcl16/common/centroid.h>
+#include <pcl/io/io.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/common/centroid.h>
 
 // OpenCV
 #include <opencv2/core/core.hpp>
@@ -98,12 +98,12 @@ class PushTrial
 
   // Members
   std::string trial_id;
-  pcl16::PointXYZ init_loc;
+  pcl::PointXYZ init_loc;
   double init_theta;
-  pcl16::PointXYZ final_loc;
+  pcl::PointXYZ final_loc;
   double final_theta;
   Pose2D goal_pose;
-  pcl16::PointXYZ start_pt;
+  pcl::PointXYZ start_pt;
   std::string primitive;
   std::string controller;
   std::string proxy;
@@ -126,7 +126,7 @@ inline int objLocToIdx(double val, double min_val, double max_val)
   return round((val-min_val)/XY_RES);
 }
 
-cv::Point worldPtToImgPt(pcl16::PointXYZ world_pt, double min_x, double max_x,
+cv::Point worldPtToImgPt(pcl::PointXYZ world_pt, double min_x, double max_x,
                          double min_y, double max_y)
 {
   cv::Point img_pt(worldLocToIdx(world_pt.x, min_x, max_x),
@@ -134,17 +134,17 @@ cv::Point worldPtToImgPt(pcl16::PointXYZ world_pt, double min_x, double max_x,
   return img_pt;
 }
 
-pcl16::PointXYZ worldPointInObjectFrame(pcl16::PointXYZ world_pt, PushTrackerState& cur_state)
+pcl::PointXYZ worldPointInObjectFrame(pcl::PointXYZ world_pt, PushTrackerState& cur_state)
 {
   // Center on object frame
-  pcl16::PointXYZ shifted_pt;
+  pcl::PointXYZ shifted_pt;
   shifted_pt.x = world_pt.x - cur_state.x.x;
   shifted_pt.y = world_pt.y - cur_state.x.y;
   shifted_pt.z = world_pt.z - cur_state.z;
   double ct = cos(cur_state.x.theta);
   double st = sin(cur_state.x.theta);
   // Rotate into correct frame
-  pcl16::PointXYZ obj_pt;
+  pcl::PointXYZ obj_pt;
   obj_pt.x =  ct*shifted_pt.x + st*shifted_pt.y;
   obj_pt.y = -st*shifted_pt.x + ct*shifted_pt.y;
   obj_pt.z = shifted_pt.z; // NOTE: Currently assume 2D motion
@@ -378,7 +378,7 @@ void visualizeObjectBoundarySamplesGlobal(XYZPointCloud& hull_cloud, cv::Mat& fo
 }
 
 
-cv::Point projectPointIntoImage(pcl16::PointXYZ pt_in, tf::Transform t, sensor_msgs::CameraInfo cam_info,
+cv::Point projectPointIntoImage(pcl::PointXYZ pt_in, tf::Transform t, sensor_msgs::CameraInfo cam_info,
                                 int num_downsamples=1)
 {
   // ROS_INFO_STREAM("Pt in:" << pt_in);
@@ -404,7 +404,7 @@ cv::Point projectPointIntoImage(pcl16::PointXYZ pt_in, tf::Transform t, sensor_m
 }
 
 
-cv::Mat displayPushVector(cv::Mat& img, pcl16::PointXYZ& start_point, pcl16::PointXYZ& end_point,
+cv::Mat displayPushVector(cv::Mat& img, pcl::PointXYZ& start_point, pcl::PointXYZ& end_point,
                           tf::Transform workspace_to_camera, sensor_msgs::CameraInfo cam_info)
 {
   cv::Mat disp_img;
@@ -426,17 +426,17 @@ cv::Mat trackerDisplay(cv::Mat& in_frame, PushTrackerState& state, ProtoObject& 
 {
   cv::Mat centroid_frame;
   in_frame.copyTo(centroid_frame);
-  pcl16::PointXYZ centroid_point(state.x.x, state.x.y, state.z);
+  pcl::PointXYZ centroid_point(state.x.x, state.x.y, state.z);
   const cv::Point img_c_idx = projectPointIntoImage(centroid_point, workspace_to_camera, cam_info);
   double theta = state.x.theta;
 
   const float x_min_rad = (std::cos(theta+0.5*M_PI)*0.05);
   const float y_min_rad = (std::sin(theta+0.5*M_PI)*0.05);
-  pcl16::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
+  pcl::PointXYZ table_min_point(centroid_point.x+x_min_rad, centroid_point.y+y_min_rad,
                                   centroid_point.z);
   const float x_maj_rad = (std::cos(theta)*0.15);
   const float y_maj_rad = (std::sin(theta)*0.15);
-  pcl16::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
+  pcl::PointXYZ table_maj_point(centroid_point.x+x_maj_rad, centroid_point.y+y_maj_rad,
                                   centroid_point.z);
   const cv::Point2f img_min_idx = projectPointIntoImage(table_min_point,
                                                         workspace_to_camera, cam_info);
@@ -500,14 +500,14 @@ ProtoObject generateObjectFromState(XYZPointCloud& obj_cloud)
 {
   ProtoObject obj;
   obj.cloud = obj_cloud;
-  pcl16::compute3DCentroid(obj_cloud, obj.centroid);
+  pcl::compute3DCentroid(obj_cloud, obj.centroid);
   return obj;
 }
 
 cv::Mat projectHandIntoBoundaryImage(ControlTimeStep& cts, PushTrackerState& cur_state,
                                      XYZPointCloud& hull_cloud)
 {
-  pcl16::PointXYZ hand_pt;
+  pcl::PointXYZ hand_pt;
   hand_pt.x = cts.ee.position.x;
   hand_pt.y = cts.ee.position.y;
   hand_pt.z = cts.ee.position.z;
@@ -517,7 +517,7 @@ cv::Mat projectHandIntoBoundaryImage(ControlTimeStep& cts, PushTrackerState& cur
   tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
   // Add a fixed amount projection forward using the hand pose (or axis)
   // TODO: Get the hand model into here and render the whole fucking thing
-  pcl16::PointXYZ forward_pt; // TODO: Is this dependent on behavior primitive used?
+  pcl::PointXYZ forward_pt; // TODO: Is this dependent on behavior primitive used?
   forward_pt.x = cts.ee.position.x + cos(yaw)*0.01;;
   forward_pt.y = cts.ee.position.y + sin(yaw)*0.01;
   forward_pt.z = cts.ee.position.z;
@@ -540,11 +540,11 @@ void projectCTSOntoObjectBoundary(cv::Mat& footprint, ControlTimeStep& cts, Push
   int rows = ceil((max_y-min_y)/XY_RES);
   int cols = ceil((max_x-min_x)/XY_RES);
 
-  pcl16::PointXYZ world_pt;
+  pcl::PointXYZ world_pt;
   world_pt.x = cts.ee.position.x;
   world_pt.y = cts.ee.position.y;
   world_pt.z = cts.ee.position.z;
-  pcl16::PointXYZ obj_pt = worldPointInObjectFrame(world_pt, cur_state);
+  pcl::PointXYZ obj_pt = worldPointInObjectFrame(world_pt, cur_state);
   cv::Point img_pt(cols - objLocToIdx(obj_pt.x, min_x, max_x), objLocToIdx(obj_pt.y, min_y, max_y));
 
   double roll, pitch, yaw;
@@ -553,21 +553,21 @@ void projectCTSOntoObjectBoundary(cv::Mat& footprint, ControlTimeStep& cts, Push
   tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
   // Add a fixed amount projection forward using the hand pose (or axis)
-  pcl16::PointXYZ forward_pt;
+  pcl::PointXYZ forward_pt;
   forward_pt.x = cts.ee.position.x + cos(yaw)*0.01;;
   forward_pt.y = cts.ee.position.y + sin(yaw)*0.01;
   forward_pt.z = cts.ee.position.z;
-  pcl16::PointXYZ forward_obj_pt = worldPointInObjectFrame(forward_pt, cur_state);
+  pcl::PointXYZ forward_obj_pt = worldPointInObjectFrame(forward_pt, cur_state);
   cv::Point forward_img_pt(cols - objLocToIdx(forward_obj_pt.x, min_x, max_x),
                            objLocToIdx(forward_obj_pt.y, min_y, max_y));
 
   // Create line pointing in velocity vector direction
-  pcl16::PointXYZ vector_world_pt;
+  pcl::PointXYZ vector_world_pt;
   float delta_t = 1.;
   vector_world_pt.x = world_pt.x + cts.u.linear.x*delta_t;
   vector_world_pt.y = world_pt.y + cts.u.linear.y*delta_t;
   vector_world_pt.z = world_pt.z;
-  pcl16::PointXYZ vector_obj_pt = worldPointInObjectFrame(vector_world_pt, cur_state);
+  pcl::PointXYZ vector_obj_pt = worldPointInObjectFrame(vector_world_pt, cur_state);
   cv::Point vector_img_pt(cols - objLocToIdx(vector_obj_pt.x, min_x, max_x),
                           objLocToIdx(vector_obj_pt.y, min_y, max_y));
 
@@ -598,7 +598,7 @@ void projectCTSOntoObjectBoundaryGlobal(cv::Mat& footprint, ControlTimeStep& cts
   int rows = ceil((max_y-min_y)/XY_RES);
   int cols = ceil((max_x-min_x)/XY_RES);
 
-  pcl16::PointXYZ world_pt;
+  pcl::PointXYZ world_pt;
   world_pt.x = cts.ee.position.x;
   world_pt.y = cts.ee.position.y;
   world_pt.z = cts.ee.position.z;
@@ -610,7 +610,7 @@ void projectCTSOntoObjectBoundaryGlobal(cv::Mat& footprint, ControlTimeStep& cts
   tf::Matrix3x3(q).getRPY(roll, pitch, yaw);
 
   // Add a fixed amount projection forward using the hand pose (or axis)
-  pcl16::PointXYZ forward_pt;
+  pcl::PointXYZ forward_pt;
   forward_pt.x = cts.ee.position.x + cos(yaw)*0.01;;
   forward_pt.y = cts.ee.position.y + sin(yaw)*0.01;
   forward_pt.z = cts.ee.position.z;
@@ -618,7 +618,7 @@ void projectCTSOntoObjectBoundaryGlobal(cv::Mat& footprint, ControlTimeStep& cts
                            objLocToIdx(forward_pt.y, min_y, max_y));
 
   // Create line pointing in velocity vector direction
-  pcl16::PointXYZ vector_world_pt;
+  pcl::PointXYZ vector_world_pt;
   float delta_t = 1.;
   vector_world_pt.x = world_pt.x + cts.u.linear.x*delta_t;
   vector_world_pt.y = world_pt.y + cts.u.linear.y*delta_t;
@@ -675,7 +675,7 @@ int main_visualize_training_samples(int argc, char** argv)
   base_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx+base_img_idx << "_"
                 << 0 << ".pcd";
   XYZPointCloud base_obj_cloud;
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(base_obj_name.str(), base_obj_cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ>(base_obj_name.str(), base_obj_cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << base_obj_name.str());
   }
@@ -704,7 +704,7 @@ int main_visualize_training_samples(int argc, char** argv)
     trial_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << 0 << ".pcd";
     cv::Mat trial_base_img = cv::imread(trial_img_name.str());
     XYZPointCloud trial_obj_cloud;
-    if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
     {
       ROS_ERROR_STREAM("Couldn't read file " << trial_obj_name.str());
     }
@@ -772,7 +772,7 @@ int main_visualize_training_samples_global(int argc, char** argv)
   base_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx+base_img_idx << "_"
                 << 0 << ".pcd";
   XYZPointCloud base_obj_cloud;
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(base_obj_name.str(), base_obj_cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ>(base_obj_name.str(), base_obj_cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << base_obj_name.str());
   }
@@ -801,7 +801,7 @@ int main_visualize_training_samples_global(int argc, char** argv)
     trial_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << 0 << ".pcd";
     cv::Mat trial_base_img = cv::imread(trial_img_name.str());
     XYZPointCloud trial_obj_cloud;
-    if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
     {
       ROS_ERROR_STREAM("Couldn't read file " << trial_obj_name.str());
     }
@@ -817,7 +817,7 @@ int main_visualize_training_samples_global(int argc, char** argv)
       step_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << j << ".pcd";
       cv::Mat trial_base_img = cv::imread(trial_img_name.str());
       XYZPointCloud step_obj_cloud;
-      if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(step_obj_name.str(), step_obj_cloud) == -1) //* load the file
+      if (pcl::io::loadPCDFile<pcl::PointXYZ>(step_obj_name.str(), step_obj_cloud) == -1) //* load the file
       {
         ROS_ERROR_STREAM("Couldn't read file " << step_obj_name.str());
       }
@@ -857,7 +857,7 @@ int main_visualize_training_samples_global(int argc, char** argv)
     trial_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << 0 << ".pcd";
     cv::Mat trial_base_img = cv::imread(trial_img_name.str());
     XYZPointCloud trial_obj_cloud;
-    if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>(trial_obj_name.str(), trial_obj_cloud) == -1) //* load the file
     {
       ROS_ERROR_STREAM("Couldn't read file " << trial_obj_name.str());
     }
@@ -872,7 +872,7 @@ int main_visualize_training_samples_global(int argc, char** argv)
       step_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << j << ".pcd";
       cv::Mat trial_base_img = cv::imread(trial_img_name.str());
       XYZPointCloud step_obj_cloud;
-      if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(step_obj_name.str(), step_obj_cloud) == -1) //* load the file
+      if (pcl::io::loadPCDFile<pcl::PointXYZ>(step_obj_name.str(), step_obj_cloud) == -1) //* load the file
       {
         ROS_ERROR_STREAM("Couldn't read file " << step_obj_name.str());
       }
@@ -945,7 +945,7 @@ int main_render(int argc, char** argv)
       cur_obj_name << data_directory_path << "feedback_control_obj_" << feedback_idx << "_" << j << ".pcd";
       cv::Mat cur_base_img = cv::imread(cur_img_name.str());
       XYZPointCloud cur_obj_cloud;
-      if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(cur_obj_name.str(), cur_obj_cloud) == -1) //* load the file
+      if (pcl::io::loadPCDFile<pcl::PointXYZ>(cur_obj_name.str(), cur_obj_cloud) == -1) //* load the file
       {
         ROS_ERROR_STREAM("Couldn't read file " << cur_obj_name.str());
       }
@@ -961,11 +961,11 @@ int main_render(int argc, char** argv)
       cv::Mat hull_cloud_viz = projectHandIntoBoundaryImage(cts, cur_state, hull_cloud);
       // Show object state
       cv::Mat obj_state_img = trackerDisplay(cur_base_img, cur_state, cur_obj, workspace_to_camera, cam_info);
-      pcl16::PointXYZ start_point;
+      pcl::PointXYZ start_point;
       start_point.x = cur_state.x.x;
       start_point.y = cur_state.x.y;
       start_point.z = cur_state.z;
-      pcl16::PointXYZ goal_point;
+      pcl::PointXYZ goal_point;
       goal_point.x = trial.goal_pose.x;
       goal_point.y = trial.goal_pose.y;
       goal_point.z = cur_state.z;
@@ -1032,7 +1032,7 @@ int main_render_offline(int argc, char** argv)
     std::stringstream init_img_name;
     init_img_name << data_directory_path << "feedback_control_input_" << feedback_idx << "_" << 0 << ".png";
     cv::Mat init_base_img = cv::imread(init_img_name.str());
-    pcl16::PointXYZ goal_point;
+    pcl::PointXYZ goal_point;
     goal_point.x = trial.goal_pose.x;
     goal_point.y = trial.goal_pose.y;
     goal_point.z = trial.init_loc.z;

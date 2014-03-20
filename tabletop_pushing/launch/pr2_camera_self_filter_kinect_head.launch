@@ -1,12 +1,13 @@
 <launch>
-  <include file="$(find pr2_machine)/pr2.machine" />
+  <!--include file="$(find pr2_machine)/pr2.machine" /-->
+  <include file="$(find pr2_machine)/sim.machine" />
   <node pkg="pr2_camera_self_filter" type="run_xinit.py"  name="run_xinit" output="screen" machine="c2" >
     <env name="DISPLAY" value=":0.0" />
   </node>
 
   <node pkg="camera_self_filter" type="camera_self_filter"  name="camera_self_filter_kinect_head" output="screen" machine="c2">
-    <param name="camera_topic" type="string" value="/kinect_head/rgb/image_rect_color" />
-    <param name="camera_info_topic" type="string" value="/kinect_head/rgb/camera_info" />
+    <param name="camera_topic" type="string" value="/head_mount_kinect/rgb/image_raw" />
+    <param name="camera_info_topic" type="string" value="/head_mount_kinect/rgb/camera_info" />
     <param name="publish_mask" type="bool" value="true" />
     <param name="publish_alpha" type="bool" value="false" />
     <param name="inverted" type="bool" value="true" />

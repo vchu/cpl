@@ -40,10 +40,10 @@
 #include <geometry_msgs/PoseStamped.h>
 
 // PCL
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
-#include <pcl16/registration/icp.h>
-#include <pcl16/registration/transformation_estimation_svd.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/transformation_estimation_svd.h>
 
 // OpenCV
 #include <opencv2/core/core.hpp>
@@ -70,7 +70,7 @@ class ObjectFeaturePointModel
 {
  public:
   cv::Mat descriptors;
-  pcl16::PointCloud<pcl16::PointXYZ> locations;
+  pcl::PointCloud<pcl::PointXYZ> locations;
   std::vector<cv::KeyPoint> keypoints;
   std::vector<int> bad_locs;
 };
@@ -94,13 +94,13 @@ class ObjectTracker25D
                    double segment_search_radius = 0.3,
                    double feature_point_ransac_inlier_percent_thresh = 0.85);
 
-  ProtoObject findTargetObject(cv::Mat& in_frame, pcl16::PointCloud<pcl16::PointXYZ>& cloud,
+  ProtoObject findTargetObject(cv::Mat& in_frame, pcl::PointCloud<pcl::PointXYZ>& cloud,
                                bool& no_objects, bool init=false);
 
   ProtoObject findTargetObjectGC(cv::Mat& in_frame, XYZPointCloud& cloud, cv::Mat& depth_frame,
                                  cv::Mat self_mask, bool& no_objects, bool init=false);
 
-  void computeState(ProtoObject& cur_obj, pcl16::PointCloud<pcl16::PointXYZ>& cloud,
+  void computeState(ProtoObject& cur_obj, pcl::PointCloud<pcl::PointXYZ>& cloud,
                     std::string proxy_name, cv::Mat& in_frame,
                     tabletop_pushing::VisFeedbackPushTrackingFeedback& state, bool init_state=false);
 
@@ -121,19 +121,19 @@ class ObjectTracker25D
                                         tabletop_pushing::VisFeedbackPushTrackingFeedback& previous_state,
                                         Eigen::Matrix4f& transform);
 
-  void extractFeaturePointModel(cv::Mat& frame, pcl16::PointCloud<pcl16::PointXYZ>& cloud, ProtoObject& obj,
+  void extractFeaturePointModel(cv::Mat& frame, pcl::PointCloud<pcl::PointXYZ>& cloud, ProtoObject& obj,
                                 ObjectFeaturePointModel& model);
 
   bool estimateFeaturePointTransform(ObjectFeaturePointModel& source_model, ObjectFeaturePointModel& target_model,
-                                     pcl16::Correspondences correspondences, Eigen::Matrix4f& transform);
+                                     pcl::Correspondences correspondences, Eigen::Matrix4f& transform);
 
   double getThetaFromEllipse(cv::RotatedRect& obj_ellipse);
 
-  void initTracks(cv::Mat& in_frame, cv::Mat& self_mask, pcl16::PointCloud<pcl16::PointXYZ>& cloud,
+  void initTracks(cv::Mat& in_frame, cv::Mat& self_mask, pcl::PointCloud<pcl::PointXYZ>& cloud,
                   std::string proxy_name, tabletop_pushing::VisFeedbackPushTrackingFeedback& state,
                   bool start_swap=false);
 
-  void updateTracks(cv::Mat& in_frame, cv::Mat& self_mask, pcl16::PointCloud<pcl16::PointXYZ>& cloud,
+  void updateTracks(cv::Mat& in_frame, cv::Mat& self_mask, pcl::PointCloud<pcl::PointXYZ>& cloud,
                     std::string proxy_name, tabletop_pushing::VisFeedbackPushTrackingFeedback& state);
 
   void pausedUpdate(cv::Mat in_frame);
@@ -250,8 +250,8 @@ class ObjectTracker25D
   cv::BFMatcher matcher_;
   cv::Mat init_frame_;
   Eigen::Matrix4f previous_transform_;
-  // pcl16::IterativeClosestPoint<pcl16::PointXYZ, pcl16::PointXYZ> feature_point_icp_;
-  pcl16::registration::TransformationEstimationSVD<pcl16::PointXYZ, pcl16::PointXYZ> feature_point_transform_est_;
+  // pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> feature_point_icp_;
+  pcl::registration::TransformationEstimationSVD<pcl::PointXYZ, pcl::PointXYZ> feature_point_transform_est_;
   double ratio_test_thresh_;
   double segment_search_radius_;
   double feature_point_max_ransac_iters_;

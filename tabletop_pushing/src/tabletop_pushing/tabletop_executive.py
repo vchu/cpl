@@ -51,7 +51,7 @@ from push_primitives import *
 
 _OFFLINE_WITH_FEEDBACK_CONTROL = False
 _OFFLINE = False
-_USE_LEARN_IO = True
+_USE_LEARN_IO = False
 _TEST_START_POSE = False
 _USE_FIXED_GOAL = False
 
@@ -105,7 +105,7 @@ class TabletopExecutive:
         self.num_start_loc_clusters = 5
         self.start_loc_use_fixed_goal = rospy.get_param('start_loc_use_fixed_goal', False)
         self.servo_head_during_pushing = rospy.get_param('servo_head_during_pushing', False)
-        self.learn_file_base = rospy.get_param('push_learn_file_base_path', '/u/thermans/data/new/aff_learn_out_')
+        self.learn_file_base = rospy.get_param('push_learn_file_base_path', '/u/vchu/data/new/aff_learn_out_')
         self.learning_dynamics = False
         self.compare_shape_for_dynamics = False
         self.check_model_performance = False
@@ -1173,7 +1173,8 @@ def get_object_id(previous_id=None):
 
 if __name__ == '__main__':
     random.seed()
-    learn_start_loc = True
+    #learn_start_loc = True
+    learn_start_loc = False
     # Used for training data collection:
     # num_start_loc_sample_locs = 32
     # Used for testing data collection:

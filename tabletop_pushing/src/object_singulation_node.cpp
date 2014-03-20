@@ -50,19 +50,19 @@
 #include <tf/transform_listener.h>
 
 // PCL
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
-#include <pcl16/common/common.h>
-#include <pcl16/common/eigen.h>
-#include <pcl16/common/centroid.h>
-#include <pcl16/io/io.h>
-#include <pcl16_ros/transforms.h>
-#include <pcl16/ros/conversions.h>
-#include <pcl16/ModelCoefficients.h>
-#include <pcl16/sample_consensus/method_types.h>
-#include <pcl16/sample_consensus/model_types.h>
-#include <pcl16/segmentation/sac_segmentation.h>
-#include <pcl16/filters/extract_indices.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/common/common.h>
+#include <pcl/common/eigen.h>
+#include <pcl/common/centroid.h>
+#include <pcl/io/io.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/ros/conversions.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 
 // OpenCV
 #include <opencv2/core/core.hpp>
@@ -111,7 +111,7 @@ using tabletop_pushing::SingulationPush;
 using tabletop_pushing::LocateTable;
 using geometry_msgs::PoseStamped;
 using geometry_msgs::PointStamped;
-typedef pcl16::PointCloud<pcl16::PointXYZ> XYZPointCloud;
+typedef pcl::PointCloud<pcl::PointXYZ> XYZPointCloud;
 typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image,
                                                         sensor_msgs::Image,
                                                         sensor_msgs::PointCloud2> MySyncPolicy;
@@ -125,7 +125,7 @@ using cpl_visual_features::LinkEdges;
 
 struct Boundary : public std::vector<cv::Point>
 {
-  std::vector<pcl16::PointXYZ> points3D;
+  std::vector<pcl::PointXYZ> points3D;
   int object_idx;
   double ort;
   double xyLength3D;
@@ -1186,7 +1186,7 @@ class ObjectSingulation
     {
       // NOTE: I don't think this is what it should be, lets try though...
       // NOTE: need to upsample the indices here
-      pcl16::PointXYZ p = cloud.at(b[i].x*upscale_, b[i].y*upscale_);
+      pcl::PointXYZ p = cloud.at(b[i].x*upscale_, b[i].y*upscale_);
       // Don't add empty points
       if ((p.x == 0.0 && p.y == 0.0 && p.z == 0.0 ) || isnan(p.x) ||
           isnan(p.y) || isnan(p.z)) continue;
@@ -1328,12 +1328,12 @@ class ObjectSingulation
       // height in the world
       cloud.at(i).z = b.points3D[0].z;
     }
-    pcl16::ModelCoefficients c;
-    pcl16::PointIndices line_inliers;
-    pcl16::SACSegmentation<pcl16::PointXYZ> line_seg;
+    pcl::ModelCoefficients c;
+    pcl::PointIndices line_inliers;
+    pcl::SACSegmentation<pcl::PointXYZ> line_seg;
     line_seg.setOptimizeCoefficients(true);
-    line_seg.setModelType(pcl16::SACMODEL_LINE);
-    line_seg.setMethodType(pcl16::SAC_RANSAC);
+    line_seg.setModelType(pcl::SACMODEL_LINE);
+    line_seg.setMethodType(pcl::SAC_RANSAC);
     line_seg.setDistanceThreshold(boundary_ransac_thresh_);
     line_seg.setInputCloud(cloud.makeShared());
     line_seg.segment(line_inliers, c);
@@ -1655,7 +1655,7 @@ class ObjectSingulation
     XYZPointCloud moved = po.pushPointCloud(obj.cloud);
     for (unsigned int i = 0; i < moved.size(); ++i)
     {
-      const pcl16::PointXYZ pt = moved.at(i);
+      const pcl::PointXYZ pt = moved.at(i);
       if  (pt.x > max_pushing_x_ || pt.x < min_pushing_x_ ||
            pt.y > max_pushing_y_ || pt.y < min_pushing_y_)
       {
@@ -1820,10 +1820,10 @@ class ObjectSingulation
                              ProtoObject& to_split)
   {
     // Split the point clouds based on the half plane distance test
-    pcl16::PointIndices p1;
+    pcl::PointIndices p1;
     for (unsigned int i = 0; i < to_split.cloud.size(); ++i)
     {
-      const pcl16::PointXYZ x = to_split.cloud.at(i);
+      const pcl::PointXYZ x = to_split.cloud.at(i);
       const float D = hessian[0]*x.x + hessian[1]*x.y + hessian[2]*x.z +
           hessian[3];
       if (D > 0)
@@ -1835,9 +1835,9 @@ class ObjectSingulation
     ProtoObjects split;
     ProtoObject po1;
     ProtoObject po2;
-    pcl16::ExtractIndices<pcl16::PointXYZ> extract;
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
     extract.setInputCloud(to_split.cloud.makeShared());
-    extract.setIndices(boost::make_shared<pcl16::PointIndices>(p1));
+    extract.setIndices(boost::make_shared<pcl::PointIndices>(p1));
     extract.filter(po1.cloud);
     extract.setNegative(true);
     extract.filter(po2.cloud);
@@ -1845,7 +1845,7 @@ class ObjectSingulation
     split.push_back(po2);
     for (unsigned int i = 0; i < split.size(); ++i)
     {
-      pcl16::compute3DCentroid(split[i].cloud, split[i].centroid);
+      pcl::compute3DCentroid(split[i].cloud, split[i].centroid);
     }
 
     return split;
@@ -2758,10 +2758,10 @@ class ObjectSingulationNode
 
     // Transform point cloud into the correct frame and convert to PCL struct
     XYZPointCloud cloud;
-    pcl16::fromROSMsg(*cloud_msg, cloud);
+    pcl::fromROSMsg(*cloud_msg, cloud);
     tf_->waitForTransform(workspace_frame_, cloud.header.frame_id,
                           cloud.header.stamp, ros::Duration(0.5));
-    pcl16_ros::transformPointCloud(workspace_frame_, cloud, cloud, *tf_);
+    pcl_ros::transformPointCloud(workspace_frame_, cloud, cloud, *tf_);
 
     // Convert nans to zeros
     for (int r = 0; r < depth_frame.rows; ++r)
@@ -2787,7 +2787,7 @@ class ObjectSingulationNode
       for (int c = 0; c < color_frame.cols; ++c)
       {
         // NOTE: Cloud is accessed by at(column, row)
-        pcl16::PointXYZ cur_pt = cloud.at(c, r);
+        pcl::PointXYZ cur_pt = cloud.at(c, r);
         if (cur_pt.x < min_workspace_x_ || cur_pt.x > max_workspace_x_ ||
             cur_pt.y < min_workspace_y_ || cur_pt.y > max_workspace_y_ ||
             cur_pt.z < min_workspace_z_ || cur_pt.z > max_workspace_z_ ||

@@ -3,12 +3,12 @@
 #include <fstream>
 #include <tabletop_pushing/shape_features.h>
 #include <ros/ros.h>
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
-#include <pcl16/io/pcd_io.h>
-#include <pcl16_ros/transforms.h>
-#include <pcl16/ros/conversions.h>
-#include <pcl16/common/pca.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/ros/conversions.h>
+#include <pcl/common/pca.h>
 #include <tabletop_pushing/VisFeedbackPushTrackingAction.h>
 #include <tabletop_pushing/point_cloud_segmentation.h>
 #include <cpl_visual_features/helpers.h>
@@ -37,48 +37,48 @@ inline int objLocToIdx(double val, double min_val, double max_val)
   return round((val-min_val)/XY_RES);
 }
 
-inline double sqrDistXY(pcl16::PointXYZ a, pcl16::PointXYZ b)
+inline double sqrDistXY(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
   return dx*dx+dy*dy;
 }
 
-pcl16::PointXYZ worldPointInObjectFrame(pcl16::PointXYZ world_pt, PushTrackerState& cur_state)
+pcl::PointXYZ worldPointInObjectFrame(pcl::PointXYZ world_pt, PushTrackerState& cur_state)
 {
   // Center on object frame
-  pcl16::PointXYZ shifted_pt;
+  pcl::PointXYZ shifted_pt;
   shifted_pt.x = world_pt.x - cur_state.x.x;
   shifted_pt.y = world_pt.y - cur_state.x.y;
   shifted_pt.z = world_pt.z - cur_state.z;
   double ct = cos(cur_state.x.theta);
   double st = sin(cur_state.x.theta);
   // Rotate into correct frame
-  pcl16::PointXYZ obj_pt;
+  pcl::PointXYZ obj_pt;
   obj_pt.x =  ct*shifted_pt.x + st*shifted_pt.y;
   obj_pt.y = -st*shifted_pt.x + ct*shifted_pt.y;
   obj_pt.z = shifted_pt.z; // NOTE: Currently assume 2D motion
   return obj_pt;
 }
 
-pcl16::PointXYZ objectPointInWorldFrame(pcl16::PointXYZ obj_pt, PushTrackerState& cur_state)
+pcl::PointXYZ objectPointInWorldFrame(pcl::PointXYZ obj_pt, PushTrackerState& cur_state)
 {
   // Rotate out of object frame
-  pcl16::PointXYZ rotated_pt;
+  pcl::PointXYZ rotated_pt;
   double ct = cos(cur_state.x.theta);
   double st = sin(cur_state.x.theta);
   rotated_pt.x = ct*obj_pt.x - st*obj_pt.y;
   rotated_pt.y = st*obj_pt.x + ct*obj_pt.y;
   rotated_pt.z = obj_pt.z;  // NOTE: Currently assume 2D motion
   // Shift to world frame
-  pcl16::PointXYZ world_pt;
+  pcl::PointXYZ world_pt;
   world_pt.x = rotated_pt.x + cur_state.x.x;
   world_pt.y = rotated_pt.y + cur_state.x.y;
   world_pt.z = rotated_pt.z + cur_state.z;
   return world_pt;
 }
 
-static inline double dist(pcl16::PointXYZ a, pcl16::PointXYZ b)
+static inline double dist(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
@@ -86,7 +86,7 @@ static inline double dist(pcl16::PointXYZ a, pcl16::PointXYZ b)
   return std::sqrt(dx*dx+dy*dy+dz*dz);
 }
 
-static inline double sqrDist(pcl16::PointXYZ a, pcl16::PointXYZ b)
+static inline double sqrDist(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
@@ -135,7 +135,7 @@ ShapeLocation chooseFixedGoalPushStartLoc(ProtoObject& cur_obj, PushTrackerState
 
     // Get initial object boundary location in the current world frame
     // ROS_INFO_STREAM("init_obj_point: " << start_loc_history_[0].boundary_loc_);
-    pcl16::PointXYZ init_loc_point = objectPointInWorldFrame(start_loc_history_[0].boundary_loc_, cur_state);
+    pcl::PointXYZ init_loc_point = objectPointInWorldFrame(start_loc_history_[0].boundary_loc_, cur_state);
     // ROS_INFO_STREAM("init_loc_point: " << init_loc_point);
 
     // Find index of closest point on current boundary to the initial pushing location
@@ -198,7 +198,7 @@ ShapeLocation chooseFixedGoalPushStartLoc(ProtoObject& cur_obj, PushTrackerState
   // Get descriptor at the chosen location
   // ShapeLocations locs = tabletop_pushing::extractShapeContextFromSamples(hull_cloud, cur_obj, true);
   double gripper_spread = 0.05;
-  pcl16::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
+  pcl::PointXYZ boundary_loc = hull_cloud[boundary_loc_idx];
 #ifdef USE_HKS_DESCRIPTOR
   ShapeDescriptor sd = tabletop_pushing::extractHKSAndGlobalShapeFeatures(hull_cloud, cur_obj,
                                                                           boundary_loc, boundary_loc_idx,
@@ -218,7 +218,7 @@ ShapeLocation chooseFixedGoalPushStartLoc(ProtoObject& cur_obj, PushTrackerState
 }
 
 ShapeLocation chooseFixedGoalPushStartLoc(ProtoObject& cur_obj, PushTrackerState& cur_state,
-                                          pcl16::PointXYZ start_pt)
+                                          pcl::PointXYZ start_pt)
 
 {
   double hull_alpha = 0.01;
@@ -237,7 +237,7 @@ ShapeLocation chooseFixedGoalPushStartLoc(ProtoObject& cur_obj, PushTrackerState
     }
   }
   double gripper_spread = 0.05;
-  pcl16::PointXYZ boundary_loc = hull_cloud[min_dist_idx];
+  pcl::PointXYZ boundary_loc = hull_cloud[min_dist_idx];
 #ifdef USE_HKS_DESCRIPTOR
   // cv::Mat boundary = visualizeObjectBoundarySamples(hull_cloud, cur_state);
   // cv::imshow("Obj boundary", boundary);
@@ -325,12 +325,12 @@ ShapeLocation chooseLearnedPushStartLoc(ProtoObject& cur_obj, PushTrackerState& 
   return loc;
 }
 
-ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_loc, double init_theta, bool new_object)
+ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl::PointXYZ init_loc, double init_theta, bool new_object)
 {
   int num_start_loc_pushes_per_sample = 3;
   int num_start_loc_sample_locs = 16;
 
-  // pcl16::PointCloud<pcl16::PointXYZ>::Ptr cloud(new pcl16::PointCloud<pcl16::PointXYZ>);
+  // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   ProtoObject cur_obj;
   //.cloud = ; // TODO: COPY from read in one?
   PushTrackerState cur_state;
@@ -342,7 +342,7 @@ ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_
   cur_obj.centroid[1] = cur_state.x.y;
   cur_obj.centroid[2] = cur_state.z;
   // ROS_INFO_STREAM("Getting cloud: " << cloud_path);
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << cloud_path);
   }
@@ -352,13 +352,13 @@ ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_
   return sl.descriptor_;
 }
 
-ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_loc, double init_theta,
-                                   pcl16::PointXYZ start_pt)
+ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl::PointXYZ init_loc, double init_theta,
+                                   pcl::PointXYZ start_pt)
 {
   int num_start_loc_pushes_per_sample = 3;
   int num_start_loc_sample_locs = 16;
 
-  // pcl16::PointCloud<pcl16::PointXYZ>::Ptr cloud(new pcl16::PointCloud<pcl16::PointXYZ>);
+  // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   ProtoObject cur_obj;
   //.cloud = ; // TODO: COPY from read in one?
   PushTrackerState cur_state;
@@ -370,7 +370,7 @@ ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_
   cur_obj.centroid[1] = cur_state.x.y;
   cur_obj.centroid[2] = cur_state.z;
   // ROS_INFO_STREAM("getting cloud: " << cloud_path);
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << cloud_path);
   }
@@ -379,13 +379,13 @@ ShapeDescriptor getTrialDescriptor(std::string cloud_path, pcl16::PointXYZ init_
   return sl.descriptor_;
 }
 
-ShapeLocation predictPushLocation(std::string cloud_path, pcl16::PointXYZ init_loc, double init_theta,
-                                  pcl16::PointXYZ start_pt, std::string param_path)
+ShapeLocation predictPushLocation(std::string cloud_path, pcl::PointXYZ init_loc, double init_theta,
+                                  pcl::PointXYZ start_pt, std::string param_path)
 {
   int num_start_loc_pushes_per_sample = 3;
   int num_start_loc_sample_locs = 16;
 
-  // pcl16::PointCloud<pcl16::PointXYZ>::Ptr cloud(new pcl16::PointCloud<pcl16::PointXYZ>);
+  // pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
   ProtoObject cur_obj;
   //.cloud = ; // TODO: COPY from read in one?
   PushTrackerState cur_state;
@@ -397,7 +397,7 @@ ShapeLocation predictPushLocation(std::string cloud_path, pcl16::PointXYZ init_l
   cur_obj.centroid[1] = cur_state.x.y;
   cur_obj.centroid[2] = cur_state.z;
   // ROS_INFO_STREAM("Getting cloud: " << cloud_path);
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << cloud_path);
   }
@@ -416,11 +416,11 @@ class TrialStuff
       start_pt(push_x_, push_y_, push_z_)
   {
   }
-  pcl16::PointXYZ init_loc;
+  pcl::PointXYZ init_loc;
   double init_theta;
   std::string trial_id;
   bool new_object;
-  pcl16::PointXYZ start_pt;
+  pcl::PointXYZ start_pt;
 };
 
 std::vector<TrialStuff> getTrialsFromFile(std::string aff_file_name)
@@ -582,7 +582,7 @@ void drawScores(std::vector<double>& push_scores, std::string out_file_path)
 
   for (int i = 0; i < hull_cloud_.size(); ++i)
   {
-    pcl16::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud_[i], cur_state_);
+    pcl::PointXYZ obj_pt =  worldPointInObjectFrame(hull_cloud_[i], cur_state_);
     int img_x = objLocToIdx(obj_pt.x, min_x, max_x);
     int img_y = objLocToIdx(obj_pt.y, min_y, max_y);
     cv::Scalar color(128, 0, 0);
@@ -613,9 +613,9 @@ void drawScores(std::vector<double>& push_scores, std::string out_file_path)
   cv::waitKey();
 }
 
-pcl16::PointXYZ pointClosestToAngle(double major_angle, XYZPointCloud& hull_cloud, Eigen::Vector4f centroid)
+pcl::PointXYZ pointClosestToAngle(double major_angle, XYZPointCloud& hull_cloud, Eigen::Vector4f centroid)
 {
-  pcl16::PointXYZ closest;
+  pcl::PointXYZ closest;
   double min_angle_dist = FLT_MAX;
   for (int i = 0; i < hull_cloud.size(); ++i)
   {
@@ -630,7 +630,7 @@ pcl16::PointXYZ pointClosestToAngle(double major_angle, XYZPointCloud& hull_clou
   return closest;
 }
 
-void getMajorMinorBoundaryDists(std::string cloud_path, pcl16::PointXYZ init_loc, pcl16::PointXYZ start_pt,
+void getMajorMinorBoundaryDists(std::string cloud_path, pcl::PointXYZ init_loc, pcl::PointXYZ start_pt,
                                 double& major_dist, double& minor_dist)
 {
   ProtoObject cur_obj;
@@ -638,7 +638,7 @@ void getMajorMinorBoundaryDists(std::string cloud_path, pcl16::PointXYZ init_loc
   cur_obj.centroid[1] = init_loc.y;
   cur_obj.centroid[2] = init_loc.z;
   // ROS_INFO_STREAM("Getting cloud: " << cloud_path);
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ> (cloud_path, cur_obj.cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << cloud_path);
   }
@@ -659,10 +659,10 @@ void getMajorMinorBoundaryDists(std::string cloud_path, pcl16::PointXYZ init_loc
     }
   }
   float gripper_spread = 0.05;
-  pcl16::PointXYZ boundary_loc = hull_cloud[min_dist_idx];
+  pcl::PointXYZ boundary_loc = hull_cloud[min_dist_idx];
 
   // TODO: Get major/minor axis of hull_cloud
-  pcl16::PCA<pcl16::PointXYZ> pca;
+  pcl::PCA<pcl::PointXYZ> pca;
   pca.setInputCloud(hull_cloud.makeShared());
   Eigen::Vector3f eigen_values = pca.getEigenValues();
   Eigen::Matrix3f eigen_vectors = pca.getEigenVectors();
@@ -671,12 +671,12 @@ void getMajorMinorBoundaryDists(std::string cloud_path, pcl16::PointXYZ init_loc
   double major_angle = minor_angle-0.5*M_PI;
 
   // TODO: Figure out points a and b of major axis intersection
-  pcl16::PointXYZ a = pointClosestToAngle(major_angle, hull_cloud, centroid);
-  pcl16::PointXYZ b = pointClosestToAngle(subPIAngle(major_angle+M_PI), hull_cloud, centroid);
+  pcl::PointXYZ a = pointClosestToAngle(major_angle, hull_cloud, centroid);
+  pcl::PointXYZ b = pointClosestToAngle(subPIAngle(major_angle+M_PI), hull_cloud, centroid);
   major_dist = std::min(sqrDistXY(boundary_loc, a), sqrDistXY(boundary_loc, b));
   // TODO: Figure out points c and d of minor axis intersection
-  pcl16::PointXYZ c  = pointClosestToAngle(minor_angle, hull_cloud, centroid);
-  pcl16::PointXYZ d = pointClosestToAngle(subPIAngle(minor_angle+M_PI), hull_cloud, centroid);
+  pcl::PointXYZ c  = pointClosestToAngle(minor_angle, hull_cloud, centroid);
+  pcl::PointXYZ d = pointClosestToAngle(subPIAngle(minor_angle+M_PI), hull_cloud, centroid);
   minor_dist = std::min(sqrDistXY(boundary_loc, c), sqrDistXY(boundary_loc, d));
 }
 
@@ -708,7 +708,7 @@ int main(int argc, char** argv)
   for (unsigned int i = 0; i < trials.size(); ++i)
   {
     std::string trial_id = trials[i].trial_id;
-    pcl16::PointXYZ init_loc = trials[i].init_loc;
+    pcl::PointXYZ init_loc = trials[i].init_loc;
     double init_theta = trials[i].init_theta;
     bool new_object = trials[i].new_object;
     // ROS_INFO_STREAM("trial_id: " << trial_id);

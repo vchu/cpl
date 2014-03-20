@@ -36,8 +36,8 @@
 
 namespace cpl_visual_features
 {
-bool lineSegmentIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::PointXYZ b1, pcl16::PointXYZ b2,
-                               pcl16::PointXYZ& intersection)
+bool lineSegmentIntersection2D(pcl::PointXYZ a1, pcl::PointXYZ a2, pcl::PointXYZ b1, pcl::PointXYZ b2,
+                               pcl::PointXYZ& intersection)
 {
   if (!lineLineIntersection2D(a1, a2, b1, b2, intersection))
   {
@@ -47,8 +47,8 @@ bool lineSegmentIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::Po
   return (pointIsBetweenOthers(intersection, a1, a2) && pointIsBetweenOthers(intersection, b1, b2));
 }
 
-bool lineLineIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::PointXYZ b1, pcl16::PointXYZ b2,
-                            pcl16::PointXYZ& intersection)
+bool lineLineIntersection2D(pcl::PointXYZ a1, pcl::PointXYZ a2, pcl::PointXYZ b1, pcl::PointXYZ b2,
+                            pcl::PointXYZ& intersection)
 {
   float denom = (a1.x-a2.x)*(b1.y-b2.y)-(a1.y-a2.y)*(b1.x-b2.x);
   if (denom == 0) // Parrallel lines
@@ -62,21 +62,21 @@ bool lineLineIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::Point
   return true;
 }
 
-bool pointIsBetweenOthers(pcl16::PointXYZ& pt, pcl16::PointXYZ& x1, pcl16::PointXYZ& x2)
+bool pointIsBetweenOthers(pcl::PointXYZ& pt, pcl::PointXYZ& x1, pcl::PointXYZ& x2)
 {
   return (pt.x >= std::min(x1.x, x2.x) && pt.x <= std::max(x1.x, x2.x) &&
           pt.y >= std::min(x1.y, x2.y) && pt.y <= std::max(x1.y, x2.y));
 }
 
-double pointLineDistance2D(pcl16::PointXYZ& pt, pcl16::PointXYZ& a, pcl16::PointXYZ& b)
+double pointLineDistance2D(pcl::PointXYZ& pt, pcl::PointXYZ& a, pcl::PointXYZ& b)
 {
-  pcl16::PointXYZ q(a.x - pt.x, a.y - pt.y, 0.0);
-  pcl16::PointXYZ n(b.x - a.x, b.y - a.y, 0.0);
+  pcl::PointXYZ q(a.x - pt.x, a.y - pt.y, 0.0);
+  pcl::PointXYZ n(b.x - a.x, b.y - a.y, 0.0);
   double norm_n = hypot(n.x, n.y);
   n.x /= norm_n;
   n.y /= norm_n;
   double q_dot_n = q.x*n.x+q.y*n.y;
-  pcl16::PointXYZ l(q.x - q_dot_n*n.x, q.y - q_dot_n*n.y, 0.0);
+  pcl::PointXYZ l(q.x - q_dot_n*n.x, q.y - q_dot_n*n.y, 0.0);
   return hypot(l.x, l.y);
 }
 

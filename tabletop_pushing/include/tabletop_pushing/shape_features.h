@@ -3,8 +3,8 @@
 
 #include <ros/ros.h>
 #include <opencv2/core/core.hpp>
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <cpl_visual_features/features/shape_context.h>
 #include <vector>
 #include <tabletop_pushing/point_cloud_segmentation.h>
@@ -16,11 +16,11 @@ namespace tabletop_pushing
 class ShapeLocation
 {
  public:
-  ShapeLocation(pcl16::PointXYZ boundary_loc, cpl_visual_features::ShapeDescriptor descriptor):
+  ShapeLocation(pcl::PointXYZ boundary_loc, cpl_visual_features::ShapeDescriptor descriptor):
       boundary_loc_(boundary_loc), descriptor_(descriptor)
   {
   }
-  pcl16::PointXYZ boundary_loc_;
+  pcl::PointXYZ boundary_loc_;
   cpl_visual_features::ShapeDescriptor descriptor_;
 
   ShapeLocation() : boundary_loc_(0.0,0.0,0.0), descriptor_()
@@ -60,7 +60,7 @@ cv::Mat visualizeObjectBoundaryMatches(XYZPointCloud& hull_a, XYZPointCloud& hul
 
 cv::Mat visualizeObjectContactLocation(XYZPointCloud& hull_cloud,
                                        tabletop_pushing::VisFeedbackPushTrackingFeedback& cur_state,
-                                       pcl16::PointXYZ& contact_pt, pcl16::PointXYZ& forward_pt);
+                                       pcl::PointXYZ& contact_pt, pcl::PointXYZ& forward_pt);
 
 ShapeLocations extractObjectShapeContext(ProtoObject& cur_obj, bool use_center = true);
 
@@ -68,13 +68,13 @@ ShapeLocations extractShapeContextFromSamples(XYZPointCloud& samples_pcl,
                                               ProtoObject& cur_obj, bool use_center);
 
 XYZPointCloud transformSamplesIntoSampleLocFrame(XYZPointCloud& samples, ProtoObject& cur_obj,
-                                                 pcl16::PointXYZ sample_pt);
+                                                 pcl::PointXYZ sample_pt);
 
 cpl_visual_features::ShapeDescriptor extractPointHistogramXY(XYZPointCloud& samples, double x_res, double y_res,
                                                              double x_range, double y_range);
 
 
-XYZPointCloud getLocalSamples(XYZPointCloud& samples_pcl, ProtoObject& cur_obj, pcl16::PointXYZ sample_loc,
+XYZPointCloud getLocalSamples(XYZPointCloud& samples_pcl, ProtoObject& cur_obj, pcl::PointXYZ sample_loc,
                               double s, double hull_alpha);
 
 cpl_visual_features::ShapeDescriptors extractLocalAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
@@ -83,19 +83,19 @@ cpl_visual_features::ShapeDescriptors extractLocalAndGlobalShapeFeatures(XYZPoin
                                                                          bool binarzie_and_normalize=true);
 
 cpl_visual_features::ShapeDescriptor extractLocalAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                                                        pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                                                        pcl::PointXYZ sample_pt, int sample_pt_idx,
                                                                         double sample_spread, double hull_alpha,
                                                                         double hist_res,
                                                                         bool binarzie_and_normalize=true);
 
 cpl_visual_features::ShapeDescriptor extractHKSAndGlobalShapeFeatures(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                                                      pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                                                      pcl::PointXYZ sample_pt, int sample_pt_idx,
                                                                       double sample_spread, double hull_alpha,
                                                                       double hist_res);
 
 
 cpl_visual_features::ShapeDescriptor extractLocalShapeFeatures(XYZPointCloud& samples_pcl,
-                                                               ProtoObject& cur_obj, pcl16::PointXYZ sample_loc,
+                                                               ProtoObject& cur_obj, pcl::PointXYZ sample_loc,
                                                                double s, double hull_alpha, double hist_res);
 
 cv::Mat computeShapeFeatureAffinityMatrix(ShapeLocations& locs, bool use_center = false);
@@ -126,16 +126,16 @@ double compareShapeDescriptors(cpl_visual_features::ShapeDescriptor& a, cpl_visu
 cv::Mat computeChi2Kernel(cpl_visual_features::ShapeDescriptors& sds, std::string feat_path, int local_length,
                           int global_length, double gamma_local, double gamma_global, double mixture_weight);
 
-pcl16::PointXYZ estimateObjectContactLocation(XYZPointCloud& hull_cloud,
+pcl::PointXYZ estimateObjectContactLocation(XYZPointCloud& hull_cloud,
                                               tabletop_pushing::VisFeedbackPushTrackingFeedback& cur_state,
-                                              pcl16::PointXYZ& tool_pt0, pcl16::PointXYZ& tool_pt1);
+                                              pcl::PointXYZ& tool_pt0, pcl::PointXYZ& tool_pt1);
 
 XYZPointCloud laplacianSmoothBoundary(XYZPointCloud& hull_cloud, int m=1);
 XYZPointCloud laplacianBoundaryCompression(XYZPointCloud& hull_cloud, int k);
 std::vector<XYZPointCloud> laplacianBoundaryCompressionAllKs(XYZPointCloud& hull_cloud);
 cv::Mat extractHeatKernelSignatures(XYZPointCloud& hull_cloud, int connectivity=1);
 cpl_visual_features::ShapeDescriptor extractHKSDescriptor(XYZPointCloud& hull, ProtoObject& cur_obj,
-                                                          pcl16::PointXYZ sample_pt, int sample_pt_idx,
+                                                          pcl::PointXYZ sample_pt, int sample_pt_idx,
                                                           double sample_spread, double hull_alpha, double hist_res);
 double compareHeatKernelSignatures(cv::Mat a, cv::Mat b);
 double compareHeatKernelSignatures(cv::Mat& K_xx, int a, int b);

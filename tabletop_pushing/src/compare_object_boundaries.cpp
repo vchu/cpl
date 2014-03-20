@@ -3,15 +3,15 @@
 #include <iostream>
 #include <fstream>
 #include <ros/ros.h>
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
-#include <pcl16/io/pcd_io.h>
-#include <pcl16/surface/concave_hull.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/surface/concave_hull.h>
 #include <tabletop_pushing/shape_features.h>
 #include <tabletop_pushing/point_cloud_segmentation.h>
 #include <tabletop_pushing/VisFeedbackPushTrackingAction.h>
 // PCL
-#include <pcl16/common/pca.h>
+#include <pcl/common/pca.h>
 
 // cpl_visual_features
 #include <cpl_visual_features/helpers.h>
@@ -36,11 +36,11 @@ void fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect& obj_ellipse)
   // Compute mean
   centroid = Eigen::Vector4f::Zero();
   // ROS_INFO_STREAM("Getting centroid");
-  pcl16::compute3DCentroid(hull_cloud, centroid);
+  pcl::compute3DCentroid(hull_cloud, centroid);
   // Compute demeanished cloud
   Eigen::MatrixXf cloud_demean;
   // ROS_INFO_STREAM("Demenaing point cloud");
-  pcl16::demeanPointCloud(hull_cloud, centroid, cloud_demean);
+  pcl::demeanPointCloud(hull_cloud, centroid, cloud_demean);
 
   // Compute the product cloud_demean * cloud_demean^T
   // ROS_INFO_STREAM("Getting alpha");
@@ -64,7 +64,7 @@ void fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect& obj_ellipse)
   //   eigen_values = pca.getEigenValues();
   //   ROS_INFO_STREAM("Getting eiven vectors");
   //   eigen_vectors = pca.getEigenVectors();
-  // } catch(pcl16::InitFailedException ife)
+  // } catch(pcl::InitFailedException ife)
   // {
   //   ROS_WARN_STREAM("Failed to compute PCA");
   //   ROS_WARN_STREAM("ife: " << ife.what());
@@ -82,14 +82,14 @@ void fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect& obj_ellipse)
 XYZPointCloud getHullFromPCDFile(std::string cloud_path)
 {
   XYZPointCloud cloud;
-  if (pcl16::io::loadPCDFile<pcl16::PointXYZ>(cloud_path, cloud) == -1) //* load the file
+  if (pcl::io::loadPCDFile<pcl::PointXYZ>(cloud_path, cloud) == -1) //* load the file
   {
     ROS_ERROR_STREAM("Couldn't read file " << cloud_path);
   }
   // ROS_INFO_STREAM("Cloud has " << cloud.size() << " points.");
   XYZPointCloud hull_cloud;
   float hull_alpha = 0.01;
-  pcl16::ConcaveHull<pcl16::PointXYZ> hull;
+  pcl::ConcaveHull<pcl::PointXYZ> hull;
   hull.setDimension(2);  // NOTE: Get 2D projection of object
   hull.setInputCloud(cloud.makeShared());
   hull.setAlpha(hull_alpha);

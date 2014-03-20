@@ -35,24 +35,24 @@
 #define cpl_comp_geometry_h_DEFINED
 
 #include <ros/ros.h>
-#include <pcl16/point_cloud.h>
-#include <pcl16/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <geometry_msgs/PointStamped.h>
 
 namespace cpl_visual_features
 {
 
-bool lineSegmentIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::PointXYZ b1, pcl16::PointXYZ b2,
-                               pcl16::PointXYZ& intersection);
+bool lineSegmentIntersection2D(pcl::PointXYZ a1, pcl::PointXYZ a2, pcl::PointXYZ b1, pcl::PointXYZ b2,
+                               pcl::PointXYZ& intersection);
 
-bool lineLineIntersection2D(pcl16::PointXYZ a1, pcl16::PointXYZ a2, pcl16::PointXYZ b1, pcl16::PointXYZ b2,
-                            pcl16::PointXYZ& intersection);
+bool lineLineIntersection2D(pcl::PointXYZ a1, pcl::PointXYZ a2, pcl::PointXYZ b1, pcl::PointXYZ b2,
+                            pcl::PointXYZ& intersection);
 
-bool pointIsBetweenOthers(pcl16::PointXYZ& pt, pcl16::PointXYZ& x1, pcl16::PointXYZ& x2);
+bool pointIsBetweenOthers(pcl::PointXYZ& pt, pcl::PointXYZ& x1, pcl::PointXYZ& x2);
 
-double pointLineDistance2D(pcl16::PointXYZ& pt, pcl16::PointXYZ& a, pcl16::PointXYZ& b);
+double pointLineDistance2D(pcl::PointXYZ& pt, pcl::PointXYZ& a, pcl::PointXYZ& b);
 
-static inline double dist(pcl16::PointXYZ a, pcl16::PointXYZ b)
+static inline double dist(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
@@ -60,7 +60,7 @@ static inline double dist(pcl16::PointXYZ a, pcl16::PointXYZ b)
   return std::sqrt(dx*dx+dy*dy+dz*dz);
 }
 
-static inline double dist(pcl16::PointXYZ a, geometry_msgs::Point b)
+static inline double dist(pcl::PointXYZ a, geometry_msgs::Point b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
@@ -68,12 +68,12 @@ static inline double dist(pcl16::PointXYZ a, geometry_msgs::Point b)
   return std::sqrt(dx*dx+dy*dy+dz*dz);
 }
 
-static inline double dist(geometry_msgs::Point b, pcl16::PointXYZ a)
+static inline double dist(geometry_msgs::Point b, pcl::PointXYZ a)
 {
   return dist(a,b);
 }
 
-static inline double sqrDist(Eigen::Vector3f& a, pcl16::PointXYZ& b)
+static inline double sqrDist(Eigen::Vector3f& a, pcl::PointXYZ& b)
 {
   const double dx = a[0]-b.x;
   const double dy = a[1]-b.y;
@@ -90,7 +90,7 @@ static inline double sqrDist(Eigen::Vector4f& a, Eigen::Vector4f& b)
   return dx*dx+dy*dy+dz*dz;
 }
 
-static inline double sqrDist(pcl16::PointXYZ a, pcl16::PointXYZ b)
+static inline double sqrDist(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;
@@ -98,7 +98,7 @@ static inline double sqrDist(pcl16::PointXYZ a, pcl16::PointXYZ b)
   return dx*dx+dy*dy+dz*dz;
 }
 
-static inline double sqrDistXY(pcl16::PointXYZ a, pcl16::PointXYZ b)
+static inline double sqrDistXY(pcl::PointXYZ a, pcl::PointXYZ b)
 {
   const double dx = a.x-b.x;
   const double dy = a.y-b.y;

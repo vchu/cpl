@@ -40,26 +40,26 @@
 #include <opencv2/highgui/highgui.hpp>
 
 // PCL
-#include <pcl16/common/common.h>
-#include <pcl16/common/eigen.h>
-#include <pcl16/common/centroid.h>
-#include <pcl16/ModelCoefficients.h>
-#include <pcl16/sample_consensus/method_types.h>
-#include <pcl16/sample_consensus/model_types.h>
-#include <pcl16/segmentation/sac_segmentation.h>
-#include <pcl16/segmentation/extract_clusters.h>
-#include <pcl16/segmentation/segment_differences.h>
-#include <pcl16/segmentation/organized_multi_plane_segmentation.h>
-#include <pcl16/search/search.h>
-#include <pcl16/search/kdtree.h>
-#include <pcl16/filters/voxel_grid.h>
-#include <pcl16/filters/passthrough.h>
-#include <pcl16/filters/extract_indices.h>
-#include <pcl16/surface/concave_hull.h>
-#include <pcl16/registration/icp.h>
-#include <pcl16/registration/icp_nl.h>
-#include <pcl16/features/integral_image_normal.h>
-#include <pcl16/features/normal_3d.h>
+#include <pcl/common/common.h>
+#include <pcl/common/eigen.h>
+#include <pcl/common/centroid.h>
+#include <pcl/ModelCoefficients.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/segmentation/segment_differences.h>
+#include <pcl/segmentation/organized_multi_plane_segmentation.h>
+#include <pcl/search/search.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/passthrough.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/surface/concave_hull.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/icp_nl.h>
+#include <pcl/features/integral_image_normal.h>
+#include <pcl/features/normal_3d.h>
 
 // STL
 #include <sstream>
@@ -76,9 +76,9 @@
 
 #define randf() static_cast<float>(rand())/RAND_MAX
 
-typedef pcl16::search::KdTree<pcl16::PointXYZ>::Ptr KdTreePtr;
-typedef pcl16::search::KdTree<pcl16::PointXYZ>::KdTreeFLANNPtr KdTreeFLANNPtr;
-using pcl16::PointXYZ;
+typedef pcl::search::KdTree<pcl::PointXYZ>::Ptr KdTreePtr;
+typedef pcl::search::KdTree<pcl::PointXYZ>::KdTreeFLANNPtr KdTreeFLANNPtr;
+using pcl::PointXYZ;
 
 namespace tabletop_pushing
 {
@@ -107,7 +107,7 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
   XYZPointCloud cloud_downsampled;
   if (use_voxel_down_)
   {
-    pcl16::VoxelGrid<PointXYZ> downsample;
+    pcl::VoxelGrid<PointXYZ> downsample;
     downsample.setInputCloud(cloud.makeShared());
     downsample.setLeafSize(voxel_down_res_, voxel_down_res_, voxel_down_res_);
     downsample.filter(cloud_downsampled);
@@ -119,7 +119,7 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
 #endif
   // Filter Cloud to not look for table planes on the ground
   XYZPointCloud cloud_z_filtered, cloud_filtered;
-  pcl16::PassThrough<PointXYZ> z_pass;
+  pcl::PassThrough<PointXYZ> z_pass;
   if (use_voxel_down_)
   {
     z_pass.setInputCloud(cloud_downsampled.makeShared());
@@ -144,7 +144,7 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
   long long filter_cloud_x_start_time = Timer::nanoTime();
 #endif
   // Filter to be just in the range in front of the robot
-  pcl16::PassThrough<PointXYZ> x_pass;
+  pcl::PassThrough<PointXYZ> x_pass;
   x_pass.setInputCloud(cloud_z_filtered.makeShared());
   x_pass.setFilterFieldName("x");
   x_pass.setFilterLimits(min_workspace_x_, max_workspace_x_);
@@ -155,27 +155,27 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
   long long RANSAC_start_time = Timer::nanoTime();
 #endif
   // Segment the tabletop from the points using RANSAC plane fitting
-  pcl16::ModelCoefficients coefficients;
-  pcl16::PointIndices plane_inliers;
+  pcl::ModelCoefficients coefficients;
+  pcl::PointIndices plane_inliers;
 
   // Create the segmentation object
-  pcl16::SACSegmentation<PointXYZ> plane_seg;
+  pcl::SACSegmentation<PointXYZ> plane_seg;
   plane_seg.setOptimizeCoefficients(true);
-  // plane_seg.setModelType(pcl16::SACMODEL_PLANE);
-  plane_seg.setModelType(pcl16::SACMODEL_PERPENDICULAR_PLANE);
-  plane_seg.setMethodType(pcl16::SAC_RANSAC);
+  // plane_seg.setModelType(pcl::SACMODEL_PLANE);
+  plane_seg.setModelType(pcl::SACMODEL_PERPENDICULAR_PLANE);
+  plane_seg.setMethodType(pcl::SAC_RANSAC);
   plane_seg.setDistanceThreshold(table_ransac_thresh_);
   plane_seg.setInputCloud(cloud_filtered.makeShared());
   Eigen::Vector3f z_axis(0.0, 0.0, 1.0);
   plane_seg.setAxis(z_axis);
   // plane_seg.setEpsAngle(table_ransac_angle_thresh_);
   plane_seg.segment(plane_inliers, coefficients);
-  pcl16::copyPointCloud(cloud_filtered, plane_inliers, plane_cloud);
+  pcl::copyPointCloud(cloud_filtered, plane_inliers, plane_cloud);
 
   // Extract the outliers from the point clouds
-  pcl16::ExtractIndices<PointXYZ> extract;
+  pcl::ExtractIndices<PointXYZ> extract;
   extract.setInputCloud(cloud_filtered.makeShared());
-  extract.setIndices(boost::make_shared<pcl16::PointIndices>(plane_inliers));
+  extract.setIndices(boost::make_shared<pcl::PointIndices>(plane_inliers));
   extract.setNegative(true);
   extract.filter(objs_cloud);
   objs_cloud.header = cloud.header;
@@ -189,7 +189,7 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
   //   ROS_INFO_STREAM("finding concave hull. Plane size: " <<
   //                   plane_cloud.size());
   //   XYZPointCloud hull_cloud;
-  //   pcl16::ConcaveHull<PointXYZ> hull;
+  //   pcl::ConcaveHull<PointXYZ> hull;
   //   hull.setInputCloud(plane_cloud.makeShared());
   //   hull.setAlpha(hull_alpha_);
   //   hull.reconstruct(hull_cloud);
@@ -201,7 +201,7 @@ void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& 
   // Extract the plane members into their own point cloud
   if (find_centroid)
   {
-    pcl16::compute3DCentroid(plane_cloud, table_centroid);
+    pcl::compute3DCentroid(plane_cloud, table_centroid);
     // ROS_WARN_STREAM("Updating table z to: " << table_centroid[2]);
     table_z_ = table_centroid[2];
   }
@@ -234,11 +234,11 @@ void PointCloudSegmentation::getTablePlaneMPS(XYZPointCloud& input_cloud, XYZPoi
                                               XYZPointCloud& plane_cloud, Eigen::Vector4f& center,
                                               bool find_hull, bool find_centroid)
 {
-  pcl16::IntegralImageNormalEstimation<PointXYZ, pcl16::Normal> ne;
+  pcl::IntegralImageNormalEstimation<PointXYZ, pcl::Normal> ne;
   ne.setNormalEstimationMethod (ne.COVARIANCE_MATRIX);
   ne.setMaxDepthChangeFactor(0.03f);
   ne.setNormalSmoothingSize(20.0f);
-  pcl16::PointCloud<pcl16::Normal>::Ptr normal_cloud(new pcl16::PointCloud<pcl16::Normal>);
+  pcl::PointCloud<pcl::Normal>::Ptr normal_cloud(new pcl::PointCloud<pcl::Normal>);
   ne.setInputCloud(input_cloud.makeShared());
   ne.compute(*normal_cloud);
 
@@ -255,20 +255,20 @@ void PointCloudSegmentation::getTablePlaneMPS(XYZPointCloud& input_cloud, XYZPoi
   // cv::imshow("normals", normal_img);
   // cv::waitKey();
 
-  pcl16::OrganizedMultiPlaneSegmentation<PointXYZ, pcl16::Normal, pcl16::Label> mps;
+  pcl::OrganizedMultiPlaneSegmentation<PointXYZ, pcl::Normal, pcl::Label> mps;
   mps.setMinInliers(mps_min_inliers_);
   mps.setAngularThreshold(mps_min_angle_thresh_*M_PI/180.);
   mps.setDistanceThreshold(mps_min_dist_thresh_);
   mps.setInputNormals(normal_cloud);
   mps.setInputCloud(input_cloud.makeShared());
-  std::vector<pcl16::PlanarRegion<PointXYZ>,
-              Eigen::aligned_allocator<pcl16::PlanarRegion<PointXYZ> > > regions;
+  std::vector<pcl::PlanarRegion<PointXYZ>,
+              Eigen::aligned_allocator<pcl::PlanarRegion<PointXYZ> > > regions;
   regions.clear();
-  std::vector<pcl16::ModelCoefficients> coefficients;
-  std::vector<pcl16::PointIndices> point_indices;
-  pcl16::PointCloud<pcl16::Label>::Ptr labels(new pcl16::PointCloud<pcl16::Label>());
-  std::vector<pcl16::PointIndices> label_indices;
-  std::vector<pcl16::PointIndices> boundary_indices;
+  std::vector<pcl::ModelCoefficients> coefficients;
+  std::vector<pcl::PointIndices> point_indices;
+  pcl::PointCloud<pcl::Label>::Ptr labels(new pcl::PointCloud<pcl::Label>());
+  std::vector<pcl::PointIndices> label_indices;
+  std::vector<pcl::PointIndices> boundary_indices;
   point_indices.clear();
   label_indices.clear();
   boundary_indices.clear();
@@ -279,16 +279,16 @@ void PointCloudSegmentation::getTablePlaneMPS(XYZPointCloud& input_cloud, XYZPoi
   // for (size_t i = 0; i < regions.size (); i++)
   if (regions.size() > 0)
   {
-    pcl16::copyPointCloud(input_cloud, point_indices[0], plane_cloud);
+    pcl::copyPointCloud(input_cloud, point_indices[0], plane_cloud);
     center[0] = regions[0].getCentroid()[0];
     center[1] = regions[0].getCentroid()[1];
     center[2] = regions[0].getCentroid()[2];
     center[3] = 1.0;
 
     // Extract the outliers from the point clouds
-    pcl16::ExtractIndices<PointXYZ> extract;
+    pcl::ExtractIndices<PointXYZ> extract;
     extract.setInputCloud(input_cloud.makeShared());
-    extract.setIndices(boost::make_shared<pcl16::PointIndices>(point_indices[0]));
+    extract.setIndices(boost::make_shared<pcl::PointIndices>(point_indices[0]));
     extract.setNegative(true);
     extract.filter(objs_cloud);
   }
@@ -297,7 +297,7 @@ void PointCloudSegmentation::getTablePlaneMPS(XYZPointCloud& input_cloud, XYZPoi
   // for (int i = 0; i < regions.size(); i++)
   // {
   //   XYZPointCloud cloud_i;
-  //   pcl16::copyPointCloud(input_cloud, point_indices[i], cloud_i);
+  //   pcl::copyPointCloud(input_cloud, point_indices[i], cloud_i);
   //   projectPointCloudIntoImage(cloud_i, plane_img, cur_camera_header_.frame_id, i+1);
   // }
   // displayObjectImage(plane_img, "MPS regions", true);
@@ -470,9 +470,9 @@ void PointCloudSegmentation::clusterProtoObjects(XYZPointCloud& objects_cloud, P
 #ifdef PROFILE_OBJECT_CLUSTER_TIME
   long long cluster_objects_start_time = Timer::nanoTime();
 #endif
-  std::vector<pcl16::PointIndices> clusters;
-  pcl16::EuclideanClusterExtraction<PointXYZ> pcl_cluster;
-  const KdTreePtr clusters_tree(new pcl16::search::KdTree<PointXYZ>);
+  std::vector<pcl::PointIndices> clusters;
+  pcl::EuclideanClusterExtraction<PointXYZ> pcl_cluster;
+  const KdTreePtr clusters_tree(new pcl::search::KdTree<PointXYZ>);
   clusters_tree->setInputCloud(objects_cloud.makeShared());
 
   pcl_cluster.setClusterTolerance(cluster_tolerance_);
@@ -495,8 +495,8 @@ void PointCloudSegmentation::clusterProtoObjects(XYZPointCloud& objects_cloud, P
     ProtoObject po;
     po.push_history.clear();
     po.boundary_angle_dist.clear();
-    pcl16::copyPointCloud(objects_cloud, clusters[i], po.cloud);
-    pcl16::compute3DCentroid(po.cloud, po.centroid);
+    pcl::copyPointCloud(objects_cloud, clusters[i], po.cloud);
+    pcl::compute3DCentroid(po.cloud, po.centroid);
     po.id = i;
     po.moved = false;
     po.transform = Eigen::Matrix4f::Identity();
@@ -529,8 +529,8 @@ double PointCloudSegmentation::ICPProtoObjects(ProtoObject& a, ProtoObject& b,
                                                Eigen::Matrix4f& transform)
 {
   // TODO: Investigate this!
-  // pcl16::IterativeClosestPointNonLinear<PointXYZ, PointXYZ> icp;
-  pcl16::IterativeClosestPoint<PointXYZ, PointXYZ> icp;
+  // pcl::IterativeClosestPointNonLinear<PointXYZ, PointXYZ> icp;
+  pcl::IterativeClosestPoint<PointXYZ, PointXYZ> icp;
   icp.setMaximumIterations(icp_max_iters_);
   icp.setTransformationEpsilon(icp_transform_eps_);
   icp.setMaxCorrespondenceDistance(icp_max_cor_dist_);
@@ -560,8 +560,8 @@ double PointCloudSegmentation::ICPBoundarySamples(XYZPointCloud& hull_t_0, XYZPo
   // TODO: Profile this funciton!!!!!!!!!!!
   // TODO: Profile diff from nonlinear to standard...
   // TODO: Investigate this!
-  // pcl16::IterativeClosestPointNonLinear<pcl16::PointXYZ, pcl16::PointXYZ> icp;
-  pcl16::IterativeClosestPoint<pcl16::PointXYZ, pcl16::PointXYZ> icp;
+  // pcl::IterativeClosestPointNonLinear<pcl::PointXYZ, pcl::PointXYZ> icp;
+  pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
   // icp.setMaximumIterations(icp_max_iters_);
   // icp.setTransformationEpsilon(icp_transform_eps_);
   // icp.setMaxCorrespondenceDistance(icp_max_cor_dist_);
@@ -586,7 +586,7 @@ void PointCloudSegmentation::getMovedRegions(XYZPointCloud& prev_cloud, XYZPoint
                                              ProtoObjects& moved, std::string suf)
 {
   // cloud_out = prev_cloud - cur_cloud
-  pcl16::SegmentDifferences<PointXYZ> pcl_diff;
+  pcl::SegmentDifferences<PointXYZ> pcl_diff;
   pcl_diff.setDistanceThreshold(cloud_diff_thresh_);
   pcl_diff.setInputCloud(prev_cloud.makeShared());
   pcl_diff.setTargetCloud(cur_cloud.makeShared());
@@ -643,22 +643,22 @@ void PointCloudSegmentation::matchMovedRegions(ProtoObjects& objs,
  * @param coefficients   [Returned] The model of the cylinder
  */
 void PointCloudSegmentation::fitCylinderRANSAC(ProtoObject& obj, XYZPointCloud& cylinder_cloud,
-                                               pcl16::ModelCoefficients& coefficients)
+                                               pcl::ModelCoefficients& coefficients)
 {
-  pcl16::NormalEstimation<PointXYZ, pcl16::Normal> ne;
+  pcl::NormalEstimation<PointXYZ, pcl::Normal> ne;
   ne.setInputCloud(obj.cloud.makeShared());
-  pcl16::search::KdTree<PointXYZ>::Ptr tree (new pcl16::search::KdTree<PointXYZ> ());
+  pcl::search::KdTree<PointXYZ>::Ptr tree (new pcl::search::KdTree<PointXYZ> ());
   ne.setSearchMethod (tree);
   ne.setRadiusSearch (0.03);
   ne.compute(obj.normals);
 
   // Create the segmentation object
   Eigen::Vector3f z_axis(0.0,0.0,1.0);
-  pcl16::PointIndices cylinder_inliers;
-  pcl16::SACSegmentationFromNormals<PointXYZ,pcl16::Normal> cylinder_seg;
+  pcl::PointIndices cylinder_inliers;
+  pcl::SACSegmentationFromNormals<PointXYZ,pcl::Normal> cylinder_seg;
   cylinder_seg.setOptimizeCoefficients(optimize_cylinder_coefficients_);
-  cylinder_seg.setModelType(pcl16::SACMODEL_CYLINDER);
-  cylinder_seg.setMethodType(pcl16::SAC_RANSAC);
+  cylinder_seg.setModelType(pcl::SACMODEL_CYLINDER);
+  cylinder_seg.setMethodType(pcl::SAC_RANSAC);
   cylinder_seg.setDistanceThreshold(cylinder_ransac_thresh_);
   cylinder_seg.setAxis(z_axis);
   // cylinder_seg.setEpsAngle(cylinder_ransac_angle_thresh_);
@@ -666,7 +666,7 @@ void PointCloudSegmentation::fitCylinderRANSAC(ProtoObject& obj, XYZPointCloud& 
   cylinder_seg.setInputNormals(obj.normals.makeShared());
   cylinder_seg.segment(cylinder_inliers, coefficients);
 
-  pcl16::copyPointCloud(obj.cloud, cylinder_inliers, cylinder_cloud);
+  pcl::copyPointCloud(obj.cloud, cylinder_inliers, cylinder_cloud);
 }
 
 /**
@@ -677,19 +677,19 @@ void PointCloudSegmentation::fitCylinderRANSAC(ProtoObject& obj, XYZPointCloud& 
  * @param coefficients [Returned] The model of the sphere
  */
 void PointCloudSegmentation::fitSphereRANSAC(ProtoObject& obj, XYZPointCloud& sphere_cloud,
-                                             pcl16::ModelCoefficients& coefficients)
+                                             pcl::ModelCoefficients& coefficients)
 {
   // Create the segmentation object
-  pcl16::PointIndices sphere_inliers;
-  pcl16::SACSegmentation<PointXYZ> sphere_seg;
+  pcl::PointIndices sphere_inliers;
+  pcl::SACSegmentation<PointXYZ> sphere_seg;
   sphere_seg.setOptimizeCoefficients(true);
-  sphere_seg.setModelType(pcl16::SACMODEL_SPHERE);
-  sphere_seg.setMethodType(pcl16::SAC_RANSAC);
+  sphere_seg.setModelType(pcl::SACMODEL_SPHERE);
+  sphere_seg.setMethodType(pcl::SAC_RANSAC);
   sphere_seg.setDistanceThreshold(sphere_ransac_thresh_);
   sphere_seg.setInputCloud(obj.cloud.makeShared());
   sphere_seg.segment(sphere_inliers, coefficients);
 
-  pcl16::copyPointCloud(obj.cloud, sphere_inliers, sphere_cloud);
+  pcl::copyPointCloud(obj.cloud, sphere_inliers, sphere_cloud);
 }
 
 /**
@@ -766,7 +766,7 @@ void PointCloudSegmentation::lineCloudIntersection(XYZPointCloud& cloud, Eigen::
   // Define parametric model of the line defined by base and vec and
   // test cloud memebers for distance from the line, if the distance is less
   // than epsilon say it intersects and add to the output set.
-  pcl16::PointIndices line_inliers;
+  pcl::PointIndices line_inliers;
   for (unsigned int i = 0; i < cloud.size(); ++i)
   {
     const PointXYZ pt = cloud.at(i);
@@ -777,9 +777,9 @@ void PointCloudSegmentation::lineCloudIntersection(XYZPointCloud& cloud, Eigen::
   }
 
   // Extract the interesecting points of the line.
-  pcl16::ExtractIndices<PointXYZ> extract;
+  pcl::ExtractIndices<PointXYZ> extract;
   extract.setInputCloud(cloud.makeShared());
-  extract.setIndices(boost::make_shared<pcl16::PointIndices>(line_inliers));
+  extract.setIndices(boost::make_shared<pcl::PointIndices>(line_inliers));
   extract.filter(line_cloud);
 }
 
@@ -889,7 +889,7 @@ void PointCloudSegmentation::downsampleCloud(XYZPointCloud& cloud_in, XYZPointCl
                                              double min_z, double max_z, bool filter_y)
 {
   XYZPointCloud cloud_z_filtered, cloud_x_filtered, cloud_filtered;
-  pcl16::PassThrough<PointXYZ> z_pass;
+  pcl::PassThrough<PointXYZ> z_pass;
   z_pass.setFilterFieldName("z");
   // ROS_INFO_STREAM("Number of points in cloud_in is: " <<
   //                  cloud_in.size());
@@ -899,7 +899,7 @@ void PointCloudSegmentation::downsampleCloud(XYZPointCloud& cloud_in, XYZPointCl
   // ROS_INFO_STREAM("Number of points in cloud_z_filtered is: " <<
   //                  cloud_z_filtered.size());
 
-  pcl16::PassThrough<PointXYZ> x_pass;
+  pcl::PassThrough<PointXYZ> x_pass;
   x_pass.setInputCloud(cloud_z_filtered.makeShared());
   x_pass.setFilterFieldName("x");
   x_pass.setFilterLimits(min_x, max_x);
@@ -909,7 +909,7 @@ void PointCloudSegmentation::downsampleCloud(XYZPointCloud& cloud_in, XYZPointCl
     // ROS_INFO_STREAM("Number of points in cloud_x_filtered is: " <<
     //                 cloud_x_filtered.size());
 
-    pcl16::PassThrough<PointXYZ> y_pass;
+    pcl::PassThrough<PointXYZ> y_pass;
     y_pass.setInputCloud(cloud_z_filtered.makeShared());
     y_pass.setFilterFieldName("y");
     y_pass.setFilterLimits(min_y, max_y);
@@ -922,7 +922,7 @@ void PointCloudSegmentation::downsampleCloud(XYZPointCloud& cloud_in, XYZPointCl
   // ROS_INFO_STREAM("Number of points in cloud_filtered is: " <<
   //                 cloud_filtered.size());
 
-  pcl16::VoxelGrid<PointXYZ> downsample_outliers;
+  pcl::VoxelGrid<PointXYZ> downsample_outliers;
   downsample_outliers.setInputCloud(cloud_filtered.makeShared());
   downsample_outliers.setLeafSize(voxel_down_res_, voxel_down_res_,
                                   voxel_down_res_);
