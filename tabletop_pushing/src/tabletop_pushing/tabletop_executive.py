@@ -795,7 +795,7 @@ class TabletopExecutive:
         else:
             raise_req.have_table_centroid = False
 
-        rospy.loginfo("Raising spine");
+        rospy.loginfo("Adjusting spine height");
         raise_req.point_head_only = False
         raise_req.init_arms = init_arms
         raise_res = self.raise_and_look_proxy(raise_req)

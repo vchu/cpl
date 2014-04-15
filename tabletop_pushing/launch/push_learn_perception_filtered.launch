@@ -1,6 +1,6 @@
 <launch>
   <!--include file="/etc/ros/openni_head.launch"/-->
   <include file="$(find tabletop_pushing)/launch/push_learn_perception.launch" />
-  <include file="$(find tabletop_pushing)/launch/pr2_camera_self_filter_kinect_head.launch" />
+  <include file="$(find tabletop_pushing)/launch/curi_camera_self_filter_asus_overhead.launch" />
   <!--include file="$(find camera_self_filter)/launch/camera_self_filter_kinect_head.launch" /-->
 </launch>

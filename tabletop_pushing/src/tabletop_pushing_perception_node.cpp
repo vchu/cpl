@@ -117,13 +117,13 @@
 
 // Debugging IFDEFS
 // #define DISPLAY_INPUT_COLOR 1
-// #define DISPLAY_WAIT 1
+#define DISPLAY_WAIT 1
 // #define PROFILE_CB_TIME 1
-// #define DEBUG_POSE_ESTIMATION 1
-// #define VISUALIZE_CONTACT_PT 1
+#define DEBUG_POSE_ESTIMATION 1
+#define VISUALIZE_CONTACT_PT 1
 #define BUFFER_AND_WRITE 1
 #define FORCE_BEFORE_AND_AFTER_VIZ 1
-// #define DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY 1
+ #define DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY 1
 // #define GET_SHAPE_DESCRIPTORS_EVERY_FRAME 1
 
 using boost::shared_ptr;
@@ -219,6 +219,8 @@ class TabletopPushingPerceptionNode
       num_position_failures_(0), footprint_count_(0),
       feedback_control_count_(0), feedback_control_instance_count_(0), open_loop_push_(false)
   {
+    // Setup extra publishers
+    fpcl_pub = n_.advertise<sensor_msgs::PointCloud2>("/asus_filtered",1);
     tf_ = shared_ptr<tf::TransformListener>(new tf::TransformListener());
     pcl_segmenter_ = shared_ptr<PointCloudSegmentation>(
         new PointCloudSegmentation(tf_));
@@ -409,6 +411,7 @@ class TabletopPushingPerceptionNode
     as_.registerPreemptCallback(
         boost::bind(&TabletopPushingPerceptionNode::pushTrackerPreemptCB,this));
     as_.start();
+
   }
 
   void sensorCallback(const sensor_msgs::ImageConstPtr& img_msg,
@@ -493,6 +496,12 @@ class TabletopPushingPerceptionNode
         }
       }
     }
+
+    // Let's publish the filtered point cloud!
+    sensor_msgs::PointCloud2 testing_cloud_msg;
+    pcl::toROSMsg(cur_self_filtered_cloud_, testing_cloud_msg); 
+    fpcl_pub.publish(testing_cloud_msg);
+
 #ifdef PROFILE_CB_TIME
     long long downsample_start_time = Timer::nanoTime();
     double filter_elapsed_time = (((double)(downsample_start_time - filter_start_time)) /
@@ -2574,6 +2583,7 @@ class TabletopPushingPerceptionNode
   message_filters::Subscriber<sensor_msgs::Image> image_sub_;
   message_filters::Subscriber<sensor_msgs::Image> mask_sub_;
   message_filters::Subscriber<sensor_msgs::PointCloud2> cloud_sub_;
+  ros::Publisher fpcl_pub; 
   message_filters::Synchronizer<MySyncPolicy> sync_;
   sensor_msgs::CameraInfo cam_info_;
   shared_ptr<tf::TransformListener> tf_;

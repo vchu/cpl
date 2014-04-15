@@ -1,5 +1,4 @@
-<package>
-  <description brief="tabletop_pushing">
+<package> <description brief="tabletop_pushing">
 
      tabletop_pushing
 
@@ -34,6 +33,9 @@
   <depend package="hrl_pr2_arms"/>
   <depend package="robot_mechanism_controllers"/>
   <depend package="pr2_camera_self_filter"/>
+  <!--depend package="test_moveit_curi"/-->
+  <depend package="hrl_dynamic_mpc"/>
+  <depend package="m3ctrl_msgs"/>
 
   <export>
     <cpp cflags="-I${prefix}/include" lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lpoint_cloud_segmentation -lshape_features" />

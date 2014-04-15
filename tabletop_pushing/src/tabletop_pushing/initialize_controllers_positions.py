@@ -58,6 +58,9 @@ from analyze_mpc import MPCSolutionIO, PushTrajectoryIO
 from pushing_dynamics_models import *
 from push_trajectory_generator import *
 from util import sign, subPIAngle, trigAugState
+import darci_arm_kinematics as dak
+from m3ctrl_msgs.msg import M3JointCmd
+import curi_client as curi_client
 
 _OFFLINE = False
 _USE_LEARN_IO = True
@@ -66,29 +69,14 @@ _SAVE_MPC_DATA = True
 _USE_SHAPE_INFO_IN_SVM = False
 _FORCE_SINGLE_SQP_SOLVE = False
 
-# Setup joints stolen from Kelsey's code.
-LEFT_ARM_SETUP_JOINTS = np.matrix([[1.32734204881265387,
-                                    -0.34601608409943324,
-                                    1.4620635485239604,
-                                    -1.2729772622637399,
-                                    7.5123303230158518,
-                                    -1.5570651396529178,
-                                    -5.5929916630672727]]).T
-RIGHT_ARM_SETUP_JOINTS = np.matrix([[-1.32734204881265387,
-                                      -0.34601608409943324,
-                                      -1.4620635485239604,
-                                      -1.2729772622637399,
-                                      -7.5123303230158518,
-                                      -1.5570651396529178,
-                                      -7.163787989862169]]).T
-LEFT_ARM_READY_JOINTS = np.matrix([[0.42427649, 0.0656137,
-                                    1.43411927, -2.11931035,
-                                    -15.78839978, -1.64163257,
-                                    -17.2947453]]).T
-RIGHT_ARM_READY_JOINTS = np.matrix([[-0.42427649, 0.0656137,
-                                     -1.43411927, -2.11931035,
-                                     15.78839978, -1.64163257,
-                                     8.64421842e+01]]).T
+# Curi Setup joints
+_ARM_POSITIONS = {
+    'zero_position' : [0.0]*7,
+    'right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
+    'left_arm_ready' : [0.0, -1.157, 0.0, 1.766, 0.0, 0.0, 0.0]
+    }
+
+# PR2 JointsSetup joints stolen from Kelsey's code.
 LEFT_ARM_PULL_READY_JOINTS = np.matrix([[0.42427649,
                                          -0.34601608409943324,
                                          1.43411927,
@@ -96,43 +84,6 @@ LEFT_ARM_PULL_READY_JOINTS = np.matrix([[0.42427649,
                                          82.9984037,
                                          -1.64163257,
                                          -36.16]]).T
-RIGHT_ARM_PULL_READY_JOINTS = np.matrix([[-0.42427649,
-                                         -0.34601608409943324,
-                                         -1.43411927,
-                                         -2.11931035,
-                                         -82.9984037,
-                                         -1.64163257,
-                                         54.8]]).T
-LEFT_ARM_HIGH_PUSH_READY_JOINTS = np.matrix([[0.42427649,
-                                              -0.34601608409943324,
-                                              1.43411927,
-                                              -2.11931035,
-                                              -15.78839978,
-                                              -1.64163257,
-                                              -17.2947453]]).T
-RIGHT_ARM_HIGH_PUSH_READY_JOINTS = np.matrix([[-0.42427649,
-                                                -0.34601608409943324,
-                                                -1.43411927,
-                                                -2.11931035,
-                                                15.78839978,
-                                                -1.64163257,
-                                                8.64421842e+01]]).T
-LEFT_ARM_HIGH_SWEEP_READY_JOINTS = LEFT_ARM_HIGH_PUSH_READY_JOINTS
-RIGHT_ARM_HIGH_SWEEP_READY_JOINTS = RIGHT_ARM_HIGH_PUSH_READY_JOINTS
-
-_POSTURES = {
-    'off': [],
-    'mantis': [0, 1, 0,  -1, 3.14, -1, 3.14],
-    'elbowupr': [-0.79,0,-1.6,  9999, 9999, 9999, 9999],
-    'elbowupl': [0.79,0,1.6 , 9999, 9999, 9999, 9999],
-    'old_elbowupr': [-0.79,0,-1.6, -0.79,3.14, -0.79,5.49],
-    'old_elbowupl': [0.79,0,1.6, -0.79,3.14, -0.79,5.49],
-    'elbowdownr': [-0.028262077316910873, 1.2946342642324222, -0.25785640577652386, -1.5498884526859626, -31.278913849571776, -1.0527644894829107, -1.8127318367654268],
-    'elbowdownl': [-0.0088195719039858515, 1.2834828245284853, 0.20338442004843196, -1.5565279256852611, -0.096340012666916802, -1.0235018652439782, 1.7990893054129216],
-    'gripper_place_r': [-0.58376927, 0.20531188, -1.98435142, -1.35661954, -10.97764169, -0.08100618, -6.48535644],
-    'gripper_place_l': [0.9424233, 0.24058796, 2.04239987, -1.4576695 , -1.58940656, -0.5444458 , -6.23912942]
-}
-
 _ARM_ERROR_CODES = {}
 _ARM_ERROR_CODES[-1] = 'PLANNING_FAILED'
 _ARM_ERROR_CODES[1]='SUCCESS'
@@ -172,12 +123,22 @@ _ARM_ERROR_CODES[-34]='NO_FK_SOLUTION'
 _ARM_ERROR_CODES[-35]='KINEMATICS_STATE_IN_COLLISION'
 _ARM_ERROR_CODES[-36]='INVALID_TIMEOUT'
 
-class PositionFeedbackPushNode:
+class InitializePositionControllerNode:
 
     def __init__(self):
-
         
-        rospy.init_node('position_feedback_push_node')
+        rospy.init_node('initialize_position_controller_node')
+        
+        # Setup some parameters that might be needed
+        self.default_torso_height = rospy.get_param('~default_torso_height',
+                                                    0.60)
+        # Setup the entire robot controller
+        self.robot = curi_client.DarciClient(arm='r')
+
+        # Finished init
+        rospy.loginfo("Finished initialization")
+        '''
+        rospy.init_node('initialize_position_controller_node')
         self.controller_io = ControlAnalysisIO()
         self.use_learn_io = False
         self.use_gripper_place_joint_posture = False
@@ -301,7 +262,6 @@ class PositionFeedbackPushNode:
         self.vel_controller_state_msg = JinvTeleopControllerState
         self.tf_listener = tf.TransformListener()
 
-        '''
         if not _OFFLINE:
             self.cs = ControllerSwitcher()
             self.init_joint_controllers()
@@ -371,10 +331,15 @@ class PositionFeedbackPushNode:
             'gripper_pre_sweep', FeedbackPush, self.gripper_pre_sweep)
         self.overhead_pre_push_srv = rospy.Service(
             'overhead_pre_push', FeedbackPush, self.overhead_pre_push)
-
+    '''
+        self.look_pt_x = rospy.get_param('~look_point_x', 0.7)
+        self.torso_z_offset = rospy.get_param('~torso_z_offset', 0.0)
         self.raise_and_look_serice = rospy.Service(
             'raise_and_look', RaiseAndLook, self.raise_and_look)
-    '''
+
+        self.tf_listener = tf.TransformListener()
+
+
     #
     # Initialization functions
     #
@@ -387,63 +352,43 @@ class PositionFeedbackPushNode:
         Move the arm to the initial pose to be out of the way for viewing the
         tabletop
         '''
+        # Currently missing setup the hand
         if which_arm == 'l':
-            robot_gripper = self.robot.left_gripper
-            ready_joints = LEFT_ARM_READY_JOINTS
-            setup_joints = LEFT_ARM_SETUP_JOINTS
+            setup_joints = _ARM_POSITIONS['left_arm_ready']
         else:
-            robot_gripper = self.robot.right_gripper
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            setup_joints = RIGHT_ARM_SETUP_JOINTS
+            setup_joints = _ARM_POSITIONS['right_arm_ready']
 
         rospy.loginfo('Moving %s_arm to setup pose' % which_arm)
         self.set_arm_joint_pose(setup_joints, which_arm)
         rospy.loginfo('Moved %s_arm to setup pose' % which_arm)
 
+        '''
         rospy.loginfo('Closing %s_gripper' % which_arm)
         res = robot_gripper.close(block=True, effort=self.max_close_effort)
         rospy.loginfo('Closed %s_gripper' % which_arm)
-
+        '''
 
     def reset_arm_pose(self, force_ready=False, which_arm='l',
                        high_arm_joints=False):
         '''
         Move the arm to the initial pose to be out of the way for viewing the
-        tabletop
+        tabletop - same as init_arm_pose for now?
         '''
         if which_arm == 'l':
-            robot_gripper = self.robot.left_gripper
-            if high_arm_joints:
-                ready_joints = LEFT_ARM_HIGH_PUSH_READY_JOINTS
-            else:
-                ready_joints = LEFT_ARM_READY_JOINTS
-            setup_joints = LEFT_ARM_SETUP_JOINTS
+            setup_joints = _ARM_POSITIONS['left_arm_ready']
         else:
-            robot_gripper = self.robot.right_gripper
-            if high_arm_joints:
-                ready_joints = RIGHT_ARM_HIGH_PUSH_READY_JOINTS
-            else:
-                ready_joints = RIGHT_ARM_READY_JOINTS
-            setup_joints = RIGHT_ARM_SETUP_JOINTS
-        ready_diff = np.linalg.norm(pr2.diff_arm_pose(self.get_arm_joint_pose(which_arm),
-                                                      ready_joints))
-
-        # Choose to move to ready first, if it is closer, then move to init
-        if force_ready or ready_diff > READY_POSE_MOVE_THRESH:
-            rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
-            self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
-            rospy.logdebug('Moved %s_arm to ready pose' % which_arm)
-        else:
-            rospy.logdebug('Arm in ready pose')
+            setup_joints = _ARM_POSITIONS['right_arm_ready']
 
         rospy.logdebug('Moving %s_arm to setup pose' % which_arm)
         self.set_arm_joint_pose(setup_joints, which_arm, nsecs=1.5)
         rospy.logdebug('Moved %s_arm to setup pose' % which_arm)
 
     def init_head_pose(self, camera_frame):
-        # (trans, rot) = self.tf_listener.lookupTransform('torso_lift_link', camera_frame, rospy.Time(0))
-        # rospy.loginfo('Transform from torso_lift_link to ' + camera_frame + ' is ' + str(trans) + '\t' + str(rot))
 
+        # Have the had look at the object
+        # Fill in later
+        return True
+        ''' 
         look_pt = np.asmatrix([self.look_pt_x, 0.0, -self.torso_z_offset])
         rospy.loginfo('Point head at ' + str(look_pt)+ ' in frame ' + camera_frame)
         head_res = self.robot.head.look_at(look_pt, 'torso_lift_link', camera_frame, wait=True)
@@ -453,11 +398,17 @@ class PositionFeedbackPushNode:
         else:
             rospy.logwarn('Failed to point head')
             return False
+        '''
 
     def init_spine_pose(self):
-        rospy.loginfo('Setting spine height to '+str(self.default_torso_height))
-        self.robot.torso.set_pose(self.default_torso_height)
-        new_torso_position = np.asarray(self.robot.torso.pose()).ravel()[0]
+
+        rospy.loginfo('Setting spine height to '+str(self.default_torso_height*1000))
+
+        # Set the zlift - convert to "meka" values (cm)
+        self.robot.setDesiredJointAngles([self.default_torso_height*1000]*1)
+        self.robot.updateSendCmd(self.robot.ZLIFT)
+
+        new_torso_position = self.robot.zlift_pos
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
     def init_arms(self):
@@ -1965,6 +1916,9 @@ class PositionFeedbackPushNode:
     # Head and spine setup functions
     #
     def raise_and_look(self, request):
+
+        base_frame_name = 'world'
+
         '''
         Service callback to raise the spine to a specific height relative to the
         table height and tilt the head so that the Kinect views the table
@@ -1984,15 +1938,16 @@ class PositionFeedbackPushNode:
             return response
 
         # Get torso_lift_link position in base_link frame
-        (trans, rot) = self.tf_listener.lookupTransform('base_link', 'torso_lift_link', rospy.Time(0))
+        (trans, rot) = self.tf_listener.lookupTransform(base_frame_name, 'torso_lift_link', rospy.Time(0))
         lift_link_z = trans[2]
 
         # tabletop position in base_link frame
         request.table_centroid.header.stamp = rospy.Time(0)
-        table_base = self.tf_listener.transformPose('base_link', request.table_centroid)
+        table_base = self.tf_listener.transformPose(base_frame_name, request.table_centroid)
         table_z = table_base.pose.position.z
         goal_lift_link_z = table_z + self.torso_z_offset
         lift_link_delta_z = goal_lift_link_z - lift_link_z
+
         # rospy.logdebug('Torso height (m): ' + str(lift_link_z))
         rospy.logdebug('Table height (m): ' + str(table_z))
         rospy.logdebug('Torso goal height (m): ' + str(goal_lift_link_z))
@@ -2000,29 +1955,32 @@ class PositionFeedbackPushNode:
 
         # Set goal height based on passed on table height
         # TODO: Set these better
-        torso_max = 0.3
-        torso_min = 0.01
-        current_torso_position = np.asarray(self.robot.torso.pose()).ravel()[0]
+        torso_max = 0.7
+        torso_min = 0.3
+
+        current_torso_position = self.robot.zlift_pos
         torso_goal_position = current_torso_position + lift_link_delta_z
         torso_goal_position = (max(min(torso_max, torso_goal_position),
                                    torso_min))
         # rospy.logdebug('Moving torso to ' + str(torso_goal_position))
         # Multiply by 2.0, because of units of spine
-        self.robot.torso.set_pose(torso_goal_position)
+        #self.robot.torso.set_pose(torso_goal_position)
+        self.robot.setDesiredJointAngles([torso_goal_position*1000]*1)
+        self.robot.updateSendCmd(self.robot.ZLIFT)
 
         # rospy.logdebug('Got torso client result')
-        new_torso_position = np.asarray(self.robot.torso.pose()).ravel()[0]
+        new_torso_position = np.asarray(self.robot.zlift_pos)
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
         # Get torso_lift_link position in base_link frame
 
-        (new_trans, rot) = self.tf_listener.lookupTransform('base_link',
+        (new_trans, rot) = self.tf_listener.lookupTransform(base_frame_name,
                                                             'torso_lift_link',
                                                             rospy.Time(0))
         new_lift_link_z = new_trans[2]
         # rospy.logdebug('New Torso height (m): ' + str(new_lift_link_z))
         # tabletop position in base_link frame
-        new_table_base = self.tf_listener.transformPose('base_link',
+        new_table_base = self.tf_listener.transformPose(base_frame_name,
                                                         request.table_centroid)
         new_table_z = new_table_base.pose.position.z
         rospy.loginfo('New Table height: ' + str(new_table_z))
@@ -2033,9 +1991,10 @@ class PositionFeedbackPushNode:
                                0.0,
                                -self.torso_z_offset])
         rospy.logdebug('Point head at ' + str(look_pt))
-        head_res = self.robot.head.look_at(look_pt,
-                                           request.table_centroid.header.frame_id,
-                                           request.camera_frame)
+        #head_res = self.robot.head.look_at(look_pt,
+        #                                   request.table_centroid.header.frame_id,
+        #                                   request.camera_frame)
+        head_res = True
         response = RaiseAndLookResponse()
         if head_res:
             rospy.loginfo('Succeeded in pointing head')
@@ -2055,11 +2014,14 @@ class PositionFeedbackPushNode:
             return self.robot.right.pose()
 
     def set_arm_joint_pose(self, joint_pose, which_arm, nsecs=2.0):
-        self.switch_to_joint_controllers()
+        # May need to add switching later
+        #self.switch_to_joint_controllers()
+
+        self.robot.setDesiredJointAngles(joint_pose)
         if which_arm == 'l':
-            self.robot.left.set_pose(joint_pose, nsecs, block=True)
+            self.robot.updateSendCmd(self.robot.LEFT_ARM)
         else:
-            self.robot.right.set_pose(joint_pose, nsecs, block=True)
+            self.robot.updateSendCmd(self.robot.RIGHT_ARM)
 
     def move_to_cart_pose(self, pose, which_arm,
                           done_moving_count_thresh=None, pressure=1000):
@@ -2592,6 +2554,17 @@ class PositionFeedbackPushNode:
 
     def shutdown_hook(self):
         rospy.loginfo('Cleaning up node on shutdown')
+
+        '''
+        # Reset z-lift
+        self.robot.setDesiredJointAngles([600]*1)
+        self.robot.updateSendCmd(self.robot.ZLIFT)
+
+        # Reset Arms
+        self.robot.setDesiredJointAngles(_ARM_POSITIONS['zero_position'])
+        self.robot.updateSendCmd(self.robot.LEFT_ARM)
+        self.robot.updateSendCmd(self.robot.RIGHT_ARM)
+        '''
         if _USE_LEARN_IO:
             if self.learn_io is not None:
                 self.learn_io.close_out_file()
@@ -2616,17 +2589,18 @@ class PositionFeedbackPushNode:
         #     print 'Right arm: ' + str(self.robot.right.pose())
         #     if code_in.startswith('q'):
         #         getting_joints = False
-        '''
+
+        #rospy.sleep(1.0) # Give time for all controllers to come up
         if not _OFFLINE:
             self.init_spine_pose()
-            self.init_head_pose(self.head_pose_cam_frame)
+            #self.init_head_pose(self.head_pose_cam_frame)
             self.init_arms()
-            self.switch_to_cart_controllers()
-        '''
+            #self.switch_to_cart_controllers()
+
         rospy.loginfo('Done initializing feedback pushing node.')
         rospy.on_shutdown(self.shutdown_hook)
         rospy.spin()
 
 if __name__ == '__main__':
-    node = PositionFeedbackPushNode()
+    node = InitializePositionControllerNode()
     node.run()

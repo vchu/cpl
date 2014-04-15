@@ -175,13 +175,11 @@ _ARM_ERROR_CODES[-36]='INVALID_TIMEOUT'
 class PositionFeedbackPushNode:
 
     def __init__(self):
-
-        
         rospy.init_node('position_feedback_push_node')
         self.controller_io = ControlAnalysisIO()
         self.use_learn_io = False
         self.use_gripper_place_joint_posture = False
-        out_file_name = '/home/vchu/data/new/control_out_'+str(rospy.get_time())+'.txt'
+        out_file_name = '/u/thermans/data/new/control_out_'+str(rospy.get_time())+'.txt'
         rospy.loginfo('Opening controller output file: '+out_file_name)
         if _USE_LEARN_IO:
             self.learn_io = None
@@ -191,7 +189,7 @@ class PositionFeedbackPushNode:
 
         # Setup parameters
         self.learned_controller_base_path = rospy.get_param('~learned_controller_base_path',
-                                                            '/home/vchu/cfg/controllers/')
+                                                            '/u/thermans/cfg/controllers/')
         self.torso_z_offset = rospy.get_param('~torso_z_offset', 0.30)
         self.look_pt_x = rospy.get_param('~look_point_x', 0.7)
         self.head_pose_cam_frame = rospy.get_param('~head_pose_cam_frame',
@@ -289,7 +287,7 @@ class PositionFeedbackPushNode:
         self.r_arm_F = None
 
         self.goal_cb_count = 0
-        
+
         # Setup cartesian controller parameters
         if self.use_jinv:
             self.base_cart_controller_name = '_cart_jinv_push'
@@ -301,7 +299,6 @@ class PositionFeedbackPushNode:
         self.vel_controller_state_msg = JinvTeleopControllerState
         self.tf_listener = tf.TransformListener()
 
-        '''
         if not _OFFLINE:
             self.cs = ControllerSwitcher()
             self.init_joint_controllers()
@@ -311,7 +308,6 @@ class PositionFeedbackPushNode:
             # Setup arms
             rospy.loginfo('Creating pr2 object')
             self.robot = pr2.PR2(self.tf_listener, arms=True, base=False, use_kinematics=False)#, use_projector=False)
-
         # Arm Inverse Kinematics
         self.l_arm_ik_proxy = rospy.ServiceProxy('/pr2_left_arm_kinematics/get_ik', GetPositionIK)
         self.r_arm_ik_proxy = rospy.ServiceProxy('/pr2_right_arm_kinematics/get_ik', GetPositionIK)
@@ -374,7 +370,6 @@ class PositionFeedbackPushNode:
 
         self.raise_and_look_serice = rospy.Service(
             'raise_and_look', RaiseAndLook, self.raise_and_look)
-    '''
     #
     # Initialization functions
     #
@@ -2616,13 +2611,11 @@ class PositionFeedbackPushNode:
         #     print 'Right arm: ' + str(self.robot.right.pose())
         #     if code_in.startswith('q'):
         #         getting_joints = False
-        '''
         if not _OFFLINE:
             self.init_spine_pose()
             self.init_head_pose(self.head_pose_cam_frame)
             self.init_arms()
             self.switch_to_cart_controllers()
-        '''
         rospy.loginfo('Done initializing feedback pushing node.')
         rospy.on_shutdown(self.shutdown_hook)
         rospy.spin()
