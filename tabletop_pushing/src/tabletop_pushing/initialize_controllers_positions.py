@@ -72,8 +72,10 @@ _FORCE_SINGLE_SQP_SOLVE = False
 # Curi Setup joints
 _ARM_POSITIONS = {
     'zero_position' : [0.0]*7,
-    'right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
-    'left_arm_ready' : [0.0, -1.157, 0.0, 1.766, 0.0, 0.0, 0.0]
+    'right_arm_ready' : [-0.755, 0.543, 0.646, 2.12, 0.014, 0.0, 0.0],
+    'left_arm_ready' : [-0.755, -0.543, -0.646, 2.12, 0.014, 0.0, 0.0],
+    'old_right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
+    'old_arm_ready' : [0.0, -1.157, 0.0, 1.766, 0.0, 0.0, 0.0]
     }
 
 # PR2 JointsSetup joints stolen from Kelsey's code.
@@ -172,8 +174,6 @@ class InitializePositionControllerNode:
         self.post_controller_switch_sleep = rospy.get_param(
             '~arm_switch_sleep_time', 0.5)
         self.move_cart_check_hz = rospy.get_param('~move_cart_check_hz', 100)
-        self.arm_done_moving_count_thresh = rospy.get_param(
-            '~not_moving_count_thresh', 30)
         self.arm_done_moving_epc_count_thresh = rospy.get_param(
             '~not_moving_epc_count_thresh', 60)
         self.post_move_count_thresh = rospy.get_param('~post_move_count_thresh',
@@ -332,12 +332,22 @@ class InitializePositionControllerNode:
         self.overhead_pre_push_srv = rospy.Service(
             'overhead_pre_push', FeedbackPush, self.overhead_pre_push)
     '''
+        # Needed parameters
         self.look_pt_x = rospy.get_param('~look_point_x', 0.7)
         self.torso_z_offset = rospy.get_param('~torso_z_offset', 0.0)
+        self.high_arm_init_z = rospy.get_param('~high_arm_start_z', 0.15)
+        self.lower_arm_init_z = rospy.get_param('~lower_arm_start_z', -0.10)
+        self.arm_done_moving_count_thresh = rospy.get_param(
+            '~not_moving_count_thresh', 30)
+
+        self.tf_listener = tf.TransformListener()
+
+        # Setup service calls
         self.raise_and_look_serice = rospy.Service(
             'raise_and_look', RaiseAndLook, self.raise_and_look)
 
-        self.tf_listener = tf.TransformListener()
+        self.gripper_pre_push_srv = rospy.Service(
+            'gripper_pre_push', FeedbackPush, self.gripper_pre_push)
 
 
     #
@@ -405,10 +415,10 @@ class InitializePositionControllerNode:
         rospy.loginfo('Setting spine height to '+str(self.default_torso_height*1000))
 
         # Set the zlift - convert to "meka" values (cm)
-        self.robot.setDesiredJointAngles([self.default_torso_height*1000]*1)
+        self.robot.setDesiredJointAngles([self.default_torso_height*1000]*1, self.robot.ZLIFT)
         self.robot.updateSendCmd(self.robot.ZLIFT)
 
-        new_torso_position = self.robot.zlift_pos
+        new_torso_position = self.robot.robot[self.robot.ZLIFT]['joint_angles']
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
     def init_arms(self):
@@ -1278,14 +1288,14 @@ class InitializePositionControllerNode:
         wrist_yaw = request.wrist_yaw
 
         if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
+            ready_joints = _ARM_POSITIONS['left_arm_ready']
             if request.high_arm_init:
                 ready_joints = LEFT_ARM_PULL_READY_JOINTS
             which_arm = 'l'
             wrist_pitch = 0.5*pi
             robot_gripper = self.robot.left_gripper
         else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
+            ready_joints = _ARM_POSITIONS['right_arm_ready']
             if request.high_arm_init:
                 ready_joints = RIGHT_ARM_PULL_READY_JOINTS
             which_arm = 'r'
@@ -1475,17 +1485,17 @@ class InitializePositionControllerNode:
         is_pull = request.behavior_primitive == GRIPPER_PULL
 
         if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_HIGH_PUSH_READY_JOINTS
+            ready_joints = _ARM_POSITIONS['left_arm_ready']
+            #if request.high_arm_init:
+            #    ready_joints = LEFT_ARM_HIGH_PUSH_READY_JOINTS
             which_arm = 'l'
-            robot_gripper = self.robot.left_gripper
+            #robot_gripper = self.robot.left_gripper
         else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_HIGH_PUSH_READY_JOINTS
+            ready_joints = _ARM_POSITIONS['right_arm_ready']
+            #if request.high_arm_init:
+            #    ready_joints = RIGHT_ARM_HIGH_PUSH_READY_JOINTS
             which_arm = 'r'
-            robot_gripper = self.robot.right_gripper
+            #robot_gripper = self.robot.right_gripper
 
         self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
         rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
@@ -1958,18 +1968,18 @@ class InitializePositionControllerNode:
         torso_max = 0.7
         torso_min = 0.3
 
-        current_torso_position = self.robot.zlift_pos
+        current_torso_position = self.robot.robot[self.robot.ZLIFT]['joint_angles']
         torso_goal_position = current_torso_position + lift_link_delta_z
         torso_goal_position = (max(min(torso_max, torso_goal_position),
                                    torso_min))
         # rospy.logdebug('Moving torso to ' + str(torso_goal_position))
         # Multiply by 2.0, because of units of spine
         #self.robot.torso.set_pose(torso_goal_position)
-        self.robot.setDesiredJointAngles([torso_goal_position*1000]*1)
+        self.robot.setDesiredJointAngles([torso_goal_position*1000]*1, self.robot.ZLIFT)
         self.robot.updateSendCmd(self.robot.ZLIFT)
 
         # rospy.logdebug('Got torso client result')
-        new_torso_position = np.asarray(self.robot.zlift_pos)
+        new_torso_position = np.asarray(self.robot.robot[self.robot.ZLIFT]['joint_angles'])
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
         # Get torso_lift_link position in base_link frame
@@ -2017,17 +2027,21 @@ class InitializePositionControllerNode:
         # May need to add switching later
         #self.switch_to_joint_controllers()
 
-        self.robot.setDesiredJointAngles(joint_pose)
         if which_arm == 'l':
+            self.robot.setDesiredJointAngles(joint_pose, self.robot.LEFT_ARM)
             self.robot.updateSendCmd(self.robot.LEFT_ARM)
         else:
+            self.robot.setDesiredJointAngles(joint_pose, self.robot.RIGHT_ARM)
             self.robot.updateSendCmd(self.robot.RIGHT_ARM)
 
     def move_to_cart_pose(self, pose, which_arm,
                           done_moving_count_thresh=None, pressure=1000):
+
         if done_moving_count_thresh is None:
             done_moving_count_thresh = self.arm_done_moving_count_thresh
-        self.switch_to_cart_controllers()
+
+        # Currently no switching...
+        #self.switch_to_cart_controllers()  
         if which_arm == 'l':
             self.l_arm_cart_pub.publish(pose)
             posture_pub = self.l_arm_cart_posture_pub
