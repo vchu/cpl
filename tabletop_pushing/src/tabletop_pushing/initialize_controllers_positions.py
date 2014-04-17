@@ -2043,6 +2043,61 @@ class InitializePositionControllerNode:
         if done_moving_count_thresh is None:
             done_moving_count_thresh = self.arm_done_moving_count_thresh
 
+        rospy.loginfo("Passing in pose: %s" % pose)
+
+        # Currently no switching...
+        #self.switch_to_cart_controllers()  
+        if which_arm == 'l':
+            #self.l_arm_cart_pub.publish(pose)
+            #posture_pub = self.l_arm_cart_posture_pub
+            print self.robot.computeIK(pose, self.robot.LEFT_ARM)
+            pl = self.l_pressure_listener
+
+
+        else:
+            #self.r_arm_cart_pub.publish(pose)
+            #posture_pub = self.r_arm_cart_posture_pub
+            print self.robot.computeIK(pose, self.robot.RIGHT_ARM)
+            pl = self.r_pressure_listener
+
+        arm_not_moving_count = 0
+        r = rospy.Rate(self.move_cart_check_hz)
+        pl.rezero()
+        pl.set_threshold(pressure)
+        while arm_not_moving_count < done_moving_count_thresh:
+            if not self.arm_moving_cart(which_arm):
+                arm_not_moving_count += 1
+            else:
+                arm_not_moving_count = 0
+            # Command posture
+            m = self.get_desired_posture(which_arm)
+            posture_pub.publish(m)
+
+            if pl.check_safety_threshold():
+                rospy.loginfo('Exceeded pressure safety thresh!\n')
+                break
+            if pl.check_threshold():
+                rospy.loginfo('Exceeded pressure contact thresh...')
+                # TODO: Let something know?
+            r.sleep()
+
+        # Return pose error
+        if which_arm == 'l':
+            arm_error = self.l_arm_x_err
+        else:
+            arm_error = self.r_arm_x_err
+        error_dist = sqrt(arm_error.linear.x**2 + arm_error.linear.y**2 +
+                          arm_error.linear.z**2)
+        # rospy.loginfo('Move cart gripper error dist: ' + str(error_dist)+'\n')
+        # rospy.loginfo('Move cart gripper error: ' + str(arm_error.linear)+'\n'+str(arm_error.angular))
+        return (arm_error, error_dist)
+
+    def move_to_cart_pose_old(self, pose, which_arm,
+                          done_moving_count_thresh=None, pressure=1000):
+
+        if done_moving_count_thresh is None:
+            done_moving_count_thresh = self.arm_done_moving_count_thresh
+
         # Currently no switching...
         #self.switch_to_cart_controllers()  
         if which_arm == 'l':

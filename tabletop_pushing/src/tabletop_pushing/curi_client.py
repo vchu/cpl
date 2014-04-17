@@ -50,6 +50,9 @@ from hrl_lib import transforms as tr
 from collections import *
 import darci_arm_kinematics as dak
 
+# For move_arm
+from moveit_commander import RobotCommander, MoveGroupCommander, PlanningSceneInterface
+import moveit_msgs.msg
 
 ##
 #Class DarciClient()
@@ -174,6 +177,11 @@ class DarciClient():
         self.ft_sub = rospy.Subscriber('/loadx6_left_state', Wrench, self.ftStateCallback)
         self.ft_sub = rospy.Subscriber('/loadx6_right_state', Wrench, self.ftStateCallback)
 
+        # Setup for visualizing path
+        self.display_trajectory_publisher = rospy.Publisher(
+                                    '/move_group/display_planned_path',
+                                    moveit_msgs.msg.DisplayTrajectory)
+
         rospy.loginfo("Finished init")
        
     def init_M3_Cmd(self, size, part):
@@ -227,13 +235,65 @@ class DarciClient():
         self.lock.release()
 
     def updateHapticState(self, body_part):
-	# Even though can pass in any body part - only really works with
-	# the arms
-	bp_dict = self.states[body_part]
-        pos, rot = self.kinematics.FK(bp_dict['joint_angles'])
+	    
+        pos, rot = self.states[body_part]['kinematics'].FK(self.states[body_part]['joint_angles'])
         self.states[body_part]['end_effector_position'] = pos
         self.states[body_part]['end_effector_orient_quat'] = tr.matrix_to_quaternion(rot)
-        self.states[body_part]['J_h'] = bp_dict['kinematics'].Jacobian(bp_dict['joint_angles'])
+        self.states[body_part]['J_h'] = self.states[body_part]['kinematics'].Jacobian(self.states[body_part]['joint_angles'])
+
+    def computeIK_native(self, poseMsg, body_part):
+    
+        # Currently doesn't work because q_init is not computed correctly
+        # Convert the pose to what IK expects
+        pose = poseMsg.pose
+        pos = np.ones((3,1)) # Expects 3x1 shape
+        pos[0] = pose.position.x
+        pos[1] = pose.position.y
+        pos[2] = pose.position.z
+        rot = tr.quaternion_to_matrix(np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z,pose.orientation.w]))
+
+        self.states[body_part]['kinematics'].IK_vanilla(pos, rot, self.states[body_part]['joint_angles']) 
+
+        return self.states[body_part]['kinematics'].IK(pos, rot) 
+
+    def computeIK(self, poseMsg, body_part):
+        
+        # Uses move arm to do the planning
+        scene = PlanningSceneInterface()
+        robot = RobotCommander()
+        rospy.sleep(1)
+        if body_part == self.RIGHT_ARM:
+            group = MoveGroupCommander("right_arm")
+        elif body_part == self.LEFT_ARM:
+            group = MoveGroupCommander("left_arm")
+        else:
+            rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
+            return None
+
+        waypoints = [poseMsg.pose]
+
+        eef_step = .01
+        jump_thresh = 0
+        avoid_collisions = True
+
+        '''
+        (plan, fraction) = group.compute_cartesian_path(
+                                     waypoints,   # waypoints to follow
+                                     eef_step,        # eef_step
+                                     jump_thresh,   # jump_threshold
+                                     avoid_collisions)         # collisions
+        '''
+        import pdb; pdb.set_trace()
+        group.set_pose_target(poseMsg.pose)
+        plan1 = group.plan()
+        display_trajectory = moveit_msgs.msg.DisplayTrajectory()
+
+        #display_trajectory.trajectory_start = 
+        display_trajectory.trajectory.append(plan1)
+        self.display_trajectory_publisher.publish(display_trajectory);
+
+        #group.go()
+        return plan.joint_trajectory.points
 
     def updateSendCmd(self, body_part):
 
