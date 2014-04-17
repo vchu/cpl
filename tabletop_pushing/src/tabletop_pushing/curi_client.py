@@ -76,27 +76,27 @@ class DarciClient():
         self.body_parts = [self.RIGHT_ARM, self.LEFT_ARM, 
                            self.HEAD, self.ZLIFT]
 
-        # Setup both arms
-        self.left_kinematics = dak.DarciArmKinematics('l')
-        self.right_kinematics = dak.DarciArmKinematics('r')
-
         # Setup a dictionary to store all body parts
-        self.robot = defaultdict(dict)
+        self.states = defaultdict(dict)
 
         # Initialize all body parts
         for part in self.body_parts:
-            self.robot[part]['joint_angles'] = None 
-            self.robot[part]['joint_velocities'] = None 
-            self.robot[part]['torque'] = None 
-            self.robot[part]['J_h'] = None 
-            self.robot[part]['time'] = None 
-            self.robot[part]['desired_joint_angles'] = None 
-            self.robot[part]['stiffness_percent'] = 0.75 
-            self.robot[part]['ee_force'] = None 
-            self.robot[part]['ee_torque'] = None
-            self.robot[part]['Jc_l'] = []
-            self.robot[part]['n_l'] = []
-            self.robot[part]['values_l'] = []
+            self.states[part]['joint_angles'] = None 
+            self.states[part]['joint_velocities'] = None 
+            self.states[part]['torque'] = None 
+            self.states[part]['J_h'] = None 
+            self.states[part]['time'] = None 
+            self.states[part]['desired_joint_angles'] = None 
+            self.states[part]['stiffness_percent'] = 0.75 
+            self.states[part]['ee_force'] = None 
+            self.states[part]['ee_torque'] = None
+            self.states[part]['Jc_l'] = []
+            self.states[part]['n_l'] = []
+            self.states[part]['values_l'] = []
+
+        # Setup both arms
+        self.states[self.LEFT_ARM]['kinematics'] = dak.DarciArmKinematics('l')
+        self.states[self.RIGHT_ARM]['kinematics'] = dak.DarciArmKinematics('r')
 
         # Only do the arm that is selected
         self.humanoid_pub = rospy.Publisher('/humanoid_command', M3JointCmd)
@@ -146,26 +146,26 @@ class DarciClient():
         self.zlift_sub = rospy.Subscriber('/zlift_state', JointState, self.zliftStateCallback)
 
         # Wait for joint angle subscriber to fill joint_angles
-        while self.robot[self.HEAD]['joint_angles'] == None:
+        while self.states[self.HEAD]['joint_angles'] == None:
             rospy.sleep(0.01)
 
         for part in self.body_parts:
-            self.robot[part]['desired_joint_angles'] = copy.copy(self.robot[part]['joint_angles'])
+            self.states[part]['desired_joint_angles'] = copy.copy(self.states[part]['joint_angles'])
 
         # Setup the joint sending command for arm
         # Assumes some defaults (Joint modes, stiffness, etc.)
         joint_cmd = self.init_M3_Cmd(7, self.LEFT_ARM)
         joint_cmd.header.frame_id = 'humanoid_cmd_left'
         joint_cmd.chain = [self.LEFT_ARM]*7
-        self.robot[self.LEFT_ARM]['joint_cmd'] = joint_cmd
+        self.states[self.LEFT_ARM]['joint_cmd'] = joint_cmd
         
         joint_cmd = self.init_M3_Cmd(7, self.RIGHT_ARM)
         joint_cmd.header.frame_id = 'humanoid_cmd_right'
         joint_cmd.chain = [self.RIGHT_ARM]*7
-        self.robot[self.RIGHT_ARM]['joint_cmd'] = joint_cmd
+        self.states[self.RIGHT_ARM]['joint_cmd'] = joint_cmd
 
         # Setup Zlift
-        self.robot[self.ZLIFT]['joint_cmd'] = self.init_M3_Cmd(1, self.ZLIFT)
+        self.states[self.ZLIFT]['joint_cmd'] = self.init_M3_Cmd(1, self.ZLIFT)
 
         # Setup for head later if we want to do pointing and lookat
         # TODO: Fill no
@@ -181,9 +181,9 @@ class DarciClient():
         m3_cmd.header.stamp = rospy.Time.now()
         m3_cmd.chain_idx = np.arange(size,dtype=np.int16)
         m3_cmd.control_mode = [self.JOINT_MODE_ROS_THETA_GC]*size
-        m3_cmd.stiffness = np.array([self.robot[part]['stiffness_percent']]*size,dtype=np.float32) 
+        m3_cmd.stiffness = np.array([self.states[part]['stiffness_percent']]*size,dtype=np.float32) 
         m3_cmd.velocity = np.array([1.0]*size,dtype=np.float32) 
-        m3_cmd.position = np.array(self.robot[part]['joint_angles'],dtype=np.float32)
+        m3_cmd.position = np.array(self.states[part]['joint_angles'],dtype=np.float32)
         m3_cmd.smoothing_mode = [0]*size
 
         return m3_cmd
@@ -191,10 +191,10 @@ class DarciClient():
     def zliftStateCallback(self,msg):
         self.lock.acquire()
         part = self.ZLIFT
-        self.robot[part]['joint_angles'] = copy.copy(msg.position[0])
-        self.robot[part]['joint_velocities'] = copy.copy(msg.velocity[0])
-        self.robot[part]['torque'] = copy.copy(msg.effort[0])
-        self.robot[part]['time'] = msg.header.stamp.secs + msg.header.stamp.nsecs*(1e-9)
+        self.states[part]['joint_angles'] = copy.copy(msg.position[0])
+        self.states[part]['joint_velocities'] = copy.copy(msg.velocity[0])
+        self.states[part]['torque'] = copy.copy(msg.effort[0])
+        self.states[part]['time'] = msg.header.stamp.secs + msg.header.stamp.nsecs*(1e-9)
         self.lock.release()
 
     def ftStateCallback(self,msg):
@@ -211,30 +211,33 @@ class DarciClient():
         # Kind of ugly... but for now use hard coded locations in msg
         for part in self.body_parts:
             if part == self.RIGHT_ARM:
-                self.robot[part]['joint_angles'] = copy.copy(msg.position[0:7])
-                self.robot[part]['joint_velocities'] = copy.copy(msg.velocity[0:7])
-                self.robot[part]['torque'] = copy.copy(msg.effort[0:7])
+                self.states[part]['joint_angles'] = copy.copy(msg.position[0:7])
+                self.states[part]['joint_velocities'] = copy.copy(msg.velocity[0:7])
+                self.states[part]['torque'] = copy.copy(msg.effort[0:7])
             if part == self.LEFT_ARM:
-                self.robot[part]['joint_angles'] = copy.copy(msg.position[7:14])
-                self.robot[part]['joint_velocities'] = copy.copy(msg.velocity[7:14])
-                self.robot[part]['torque'] = copy.copy(msg.effort[7:14])
+                self.states[part]['joint_angles'] = copy.copy(msg.position[7:14])
+                self.states[part]['joint_velocities'] = copy.copy(msg.velocity[7:14])
+                self.states[part]['torque'] = copy.copy(msg.effort[7:14])
             if part == self.HEAD:
-                self.robot[part]['joint_angles'] = copy.copy(msg.position[14:25])
-                self.robot[part]['joint_velocities'] = copy.copy(msg.velocity[14:25])
-                self.robot[part]['torque'] = copy.copy(msg.effort[14:25])
-            self.robot[part]['time'] = msg.header.stamp.secs + msg.header.stamp.nsecs*(1e-9)
+                self.states[part]['joint_angles'] = copy.copy(msg.position[14:25])
+                self.states[part]['joint_velocities'] = copy.copy(msg.velocity[14:25])
+                self.states[part]['torque'] = copy.copy(msg.effort[14:25])
+            self.states[part]['time'] = msg.header.stamp.secs + msg.header.stamp.nsecs*(1e-9)
 
         self.lock.release()
 
     def updateHapticState(self, body_part):
-        pos, rot = self.kinematics.FK(self.joint_angles)
-        self.end_effector_position = pos
-        self.end_effector_orient_quat = tr.matrix_to_quaternion(rot)
-        self.J_h = self.kinematics.Jacobian(self.joint_angles)
+	# Even though can pass in any body part - only really works with
+	# the arms
+	bp_dict = self.states[body_part]
+        pos, rot = self.kinematics.FK(bp_dict['joint_angles'])
+        self.states[body_part]['end_effector_position'] = pos
+        self.states[body_part]['end_effector_orient_quat'] = tr.matrix_to_quaternion(rot)
+        self.states[body_part]['J_h'] = bp_dict['kinematics'].Jacobian(bp_dict['joint_angles'])
 
     def updateSendCmd(self, body_part):
 
-        bp_dict = self.robot[body_part]
+        bp_dict = self.states[body_part]
         cmd = bp_dict['joint_cmd']
         cmd.position = np.array(bp_dict['desired_joint_angles'], dtype=np.float32)
 
@@ -248,19 +251,19 @@ class DarciClient():
         self.desired_joint_angles = (np.array(self.desired_joint_angles) + np.array(delta_angles)).tolist()
 
     def setDesiredJointAngles(self, angles, body_part):
-        self.robot[body_part]['desired_joint_angles'] = angles
+        self.states[body_part]['desired_joint_angles'] = angles
 
     def getDesiredJointAngles(self, body_part):
-        return self.robot[body_part]['desired_joint_angles']
+        return self.states[body_part]['desired_joint_angles']
 
     def getJointAngles(self, body_part):
-        return self.robot[body_part]['joint_angles']
+        return self.states[body_part]['joint_angles']
 
     def get_joint_angles(self, body_part):
         return self.getJointAngles(body_part)
 
     def getJointVelocities(self, body_part):
-        return self.robot[body_part]['joint_velocities']
+        return self.states[body_part]['joint_velocities']
 
     def recordCurData(self):
         if self.record_data == True:

@@ -418,7 +418,7 @@ class InitializePositionControllerNode:
         self.robot.setDesiredJointAngles([self.default_torso_height*1000]*1, self.robot.ZLIFT)
         self.robot.updateSendCmd(self.robot.ZLIFT)
 
-        new_torso_position = self.robot.robot[self.robot.ZLIFT]['joint_angles']
+        new_torso_position = self.robot.states[self.robot.ZLIFT]['joint_angles']
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
     def init_arms(self):
@@ -1514,10 +1514,13 @@ class InitializePositionControllerNode:
         start_pose.pose.orientation.w = q[3]
 
         # TODO: Make gripper open dist a parameter
+	# Later can use for opening or closing the hand
+	'''
         if request.open_gripper:
             res = robot_gripper.open(block=True, position=0.05)
         if is_pull:
             res = robot_gripper.open(block=True, position=0.9)
+	'''
 
         self.use_gripper_place_joint_posture = True
         if request.high_arm_init:
@@ -1968,7 +1971,7 @@ class InitializePositionControllerNode:
         torso_max = 0.7
         torso_min = 0.3
 
-        current_torso_position = self.robot.robot[self.robot.ZLIFT]['joint_angles']
+        current_torso_position = self.robot.states[self.robot.ZLIFT]['joint_angles']
         torso_goal_position = current_torso_position + lift_link_delta_z
         torso_goal_position = (max(min(torso_max, torso_goal_position),
                                    torso_min))
@@ -1979,7 +1982,7 @@ class InitializePositionControllerNode:
         self.robot.updateSendCmd(self.robot.ZLIFT)
 
         # rospy.logdebug('Got torso client result')
-        new_torso_position = np.asarray(self.robot.robot[self.robot.ZLIFT]['joint_angles'])
+        new_torso_position = np.asarray(self.robot.states[self.robot.ZLIFT]['joint_angles'])
         rospy.loginfo('New spine height is ' + str(new_torso_position))
 
         # Get torso_lift_link position in base_link frame
