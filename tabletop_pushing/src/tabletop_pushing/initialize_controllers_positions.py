@@ -341,6 +341,8 @@ class InitializePositionControllerNode:
         self.lower_arm_init_z = rospy.get_param('~lower_arm_start_z', -0.10)
         self.arm_done_moving_count_thresh = rospy.get_param(
             '~not_moving_count_thresh', 30)
+        self.base_frame_name = 'world'
+
 
         self.tf_listener = tf.TransformListener()
 
@@ -1502,16 +1504,17 @@ class InitializePositionControllerNode:
         self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
         rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
 
-	# Convert the object into the frame of the move_it planner
-	# TODO: Rmove this hack and maybe make it a param?
-        (new_trans, rot) = self.tf_listener.lookupTransform('odom_combined',
+        # Convert the object into the frame of the move_it planner
+        # TODO: Rmove this hack and maybe make it a param?
+        (new_trans, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
                                                             'torso_lift_link',
                                                             rospy.Time(0))
         start_pose = PoseStamped()
         start_pose.header = request.start_point.header
         start_pose.pose.position.x = start_point.x + new_trans[0]
         start_pose.pose.position.y = start_point.y + new_trans[1]
-        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+        #start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.08
 
         wrist_pitch = 0.0625*pi
         q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
@@ -1521,13 +1524,13 @@ class InitializePositionControllerNode:
         start_pose.pose.orientation.w = q[3]
 
         # TODO: Make gripper open dist a parameter
-	# Later can use for opening or closing the hand
-	'''
-        if request.open_gripper:
-            res = robot_gripper.open(block=True, position=0.05)
-        if is_pull:
-            res = robot_gripper.open(block=True, position=0.9)
-	'''
+        # Later can use for opening or closing the hand
+        '''
+            if request.open_gripper:
+                res = robot_gripper.open(block=True, position=0.05)
+            if is_pull:
+                res = robot_gripper.open(block=True, position=0.9)
+        '''
 
         self.use_gripper_place_joint_posture = True
         if request.high_arm_init:
@@ -1542,7 +1545,8 @@ class InitializePositionControllerNode:
             #start_pose.pose.position.z = start_point.z
             # self.move_down_until_contact(which_arm)
 
-	import pdb; pdb.set_trace()
+	    import pdb; pdb.set_trace()
+
         # Move to start pose
         if not self.move_to_cart_pose_ik(start_pose, which_arm):
             rospy.logwarn('IK Failed, not at desired initial pose')
@@ -1939,8 +1943,6 @@ class InitializePositionControllerNode:
     #
     def raise_and_look(self, request):
 
-        base_frame_name = 'world'
-
         '''
         Service callback to raise the spine to a specific height relative to the
         table height and tilt the head so that the Kinect views the table
@@ -1960,12 +1962,12 @@ class InitializePositionControllerNode:
             return response
 
         # Get torso_lift_link position in base_link frame
-        (trans, rot) = self.tf_listener.lookupTransform(base_frame_name, 'torso_lift_link', rospy.Time(0))
+        (trans, rot) = self.tf_listener.lookupTransform(self.base_frame_name, 'torso_lift_link', rospy.Time(0))
         lift_link_z = trans[2]
 
         # tabletop position in base_link frame
         request.table_centroid.header.stamp = rospy.Time(0)
-        table_base = self.tf_listener.transformPose(base_frame_name, request.table_centroid)
+        table_base = self.tf_listener.transformPose(self.base_frame_name, request.table_centroid)
         table_z = table_base.pose.position.z
         goal_lift_link_z = table_z + self.torso_z_offset
         lift_link_delta_z = goal_lift_link_z - lift_link_z
@@ -2000,13 +2002,13 @@ class InitializePositionControllerNode:
 
         # Get torso_lift_link position in base_link frame
 
-        (new_trans, rot) = self.tf_listener.lookupTransform(base_frame_name,
+        (new_trans, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
                                                             'torso_lift_link',
                                                             rospy.Time(0))
         new_lift_link_z = new_trans[2]
         # rospy.logdebug('New Torso height (m): ' + str(new_lift_link_z))
         # tabletop position in base_link frame
-        new_table_base = self.tf_listener.transformPose(base_frame_name,
+        new_table_base = self.tf_listener.transformPose(self.base_frame_name,
                                                         request.table_centroid)
         new_table_z = new_table_base.pose.position.z
         rospy.loginfo('New Table height: ' + str(new_table_z))

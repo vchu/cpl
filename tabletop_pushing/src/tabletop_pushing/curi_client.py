@@ -243,7 +243,7 @@ class DarciClient():
         self.states[body_part]['end_effector_orient_quat'] = tr.matrix_to_quaternion(rot)
         self.states[body_part]['J_h'] = self.states[body_part]['kinematics'].Jacobian(self.states[body_part]['joint_angles'])
 
-    def computeIK_native(self, poseMsg, body_part):
+    def computeIK(self, poseMsg, body_part):
     
         # Currently doesn't work because q_init is not computed correctly
         # Convert the pose to what IK expects
@@ -252,13 +252,14 @@ class DarciClient():
         pos[0] = pose.position.x
         pos[1] = pose.position.y
         pos[2] = pose.position.z
+        import pdb; pdb.set_trace()
         rot = tr.quaternion_to_matrix(np.array([pose.orientation.x, pose.orientation.y, pose.orientation.z,pose.orientation.w]))
 
         self.states[body_part]['kinematics'].IK_vanilla(pos, rot, self.states[body_part]['joint_angles']) 
 
         return self.states[body_part]['kinematics'].IK(pos, rot) 
 
-    def computeIK(self, poseMsg, body_part):
+    def computeIK_moveit(self, poseMsg, body_part):
         
         # Uses move arm to do the planning
         scene = PlanningSceneInterface()
@@ -272,16 +273,17 @@ class DarciClient():
             rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
             return None
 
+        '''
         waypoints = [poseMsg.pose]
 
         eef_step = .01
         jump_thresh = 0
         avoid_collisions = True
-	count = 0 
-	best_fraction = 0
-	fraction = 0
-	best_plan = None
-	while fraction < 0.9 and count < 30:
+        count = 0 
+        best_fraction = 0
+        fraction = 0
+        best_plan = None
+        while fraction < 0.9 and count < 30:
             (plan, fraction) = group.compute_cartesian_path(
                                      waypoints,   # waypoints to follow
                                      eef_step,        # eef_step
@@ -305,18 +307,17 @@ class DarciClient():
 
         self.test_move_arm_pub.publish(jtm)
 	
- 
+        ''' 
         group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
-        group.set_pose_target(poseMsg.pose)
-        plan1 = group.plan()
+        plan = group.plan()
+        #group.set_pose_target(poseMsg.pose)
         #display_trajectory = moveit_msgs.msg.DisplayTrajectory()
 
         #display_trajectory.trajectory_start = 
         #display_trajectory.trajectory.append(plan1)
         #self.display_trajectory_publisher.publish(display_trajectory);
 
-        group.go()
-	#group.execute(plan)
+        group.execute(plan)
         return plan.joint_trajectory.points
 
     def updateSendCmd(self, body_part):

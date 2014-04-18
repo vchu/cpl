@@ -7,7 +7,7 @@
 
     <param name="servo_head_during_pushing" type="bool" value="false"/>
     <node pkg="tabletop_pushing" type="initialize_controllers_positions.py" name="tabletop_push_node" output="screen">
-      <param name="torso_z_offset" type="double" value="0.10"/>
+      <param name="torso_z_offset" type="double" value="0.15"/>
       <param name="default_torso_height" type="double" value="0.65"/>
       <param name="look_point_x" type="double" value="0.7"/>
       <param name="pressure_limit" type="double" value="2000"/>
