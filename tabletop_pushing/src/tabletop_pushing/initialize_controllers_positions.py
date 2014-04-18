@@ -72,6 +72,8 @@ _FORCE_SINGLE_SQP_SOLVE = False
 # Curi Setup joints
 _ARM_POSITIONS = {
     'zero_position' : [0.0]*7,
+    'aright_arm_ready' : [0.0, 1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
+    'aleft_arm_ready' : [0.0, -1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
     'right_arm_ready' : [-0.755, 0.543, 0.646, 2.12, 0.014, 0.0, 0.0],
     'left_arm_ready' : [-0.755, -0.543, -0.646, 2.12, 0.014, 0.0, 0.0],
     'old_right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
@@ -334,7 +336,7 @@ class InitializePositionControllerNode:
     '''
         # Needed parameters
         self.look_pt_x = rospy.get_param('~look_point_x', 0.7)
-        self.torso_z_offset = rospy.get_param('~torso_z_offset', 0.0)
+        self.torso_z_offset = rospy.get_param('~torso_z_offset', 0.10)
         self.high_arm_init_z = rospy.get_param('~high_arm_start_z', 0.15)
         self.lower_arm_init_z = rospy.get_param('~lower_arm_start_z', -0.10)
         self.arm_done_moving_count_thresh = rospy.get_param(
@@ -1500,11 +1502,16 @@ class InitializePositionControllerNode:
         self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
         rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
 
+	# Convert the object into the frame of the move_it planner
+	# TODO: Rmove this hack and maybe make it a param?
+        (new_trans, rot) = self.tf_listener.lookupTransform('odom_combined',
+                                                            'torso_lift_link',
+                                                            rospy.Time(0))
         start_pose = PoseStamped()
         start_pose.header = request.start_point.header
-        start_pose.pose.position.x = start_point.x
-        start_pose.pose.position.y = start_point.y
-        start_pose.pose.position.z = start_point.z
+        start_pose.pose.position.x = start_point.x + new_trans[0]
+        start_pose.pose.position.y = start_point.y + new_trans[1]
+        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
 
         wrist_pitch = 0.0625*pi
         q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
@@ -1524,16 +1531,18 @@ class InitializePositionControllerNode:
 
         self.use_gripper_place_joint_posture = True
         if request.high_arm_init:
-            start_pose.pose.position.z = self.high_arm_init_z
+            #start_pose.pose.position.z = self.high_arm_init_z
+            #start_pose.pose.position.z = self.robot.states[self.robot.ZLIFT]['joint_angles']
             self.move_to_cart_pose(start_pose, which_arm)
-            rospy.logdebug('Done moving to overhead start point')
+            rospy.logdebug('Done moving to start point')
             # Change z to lower arm to table
-            start_pose.pose.position.z = self.lower_arm_init_z
-            self.move_to_cart_pose(start_pose, which_arm)
-            rospy.loginfo('Done moving to lower start point')
-            start_pose.pose.position.z = start_point.z
+            #start_pose.pose.position.z = self.lower_arm_init_z
+            #self.move_to_cart_pose(start_pose, which_arm)
+            #rospy.loginfo('Done moving to lower start point')
+            #start_pose.pose.position.z = start_point.z
             # self.move_down_until_contact(which_arm)
 
+	import pdb; pdb.set_trace()
         # Move to start pose
         if not self.move_to_cart_pose_ik(start_pose, which_arm):
             rospy.logwarn('IK Failed, not at desired initial pose')
@@ -1969,12 +1978,16 @@ class InitializePositionControllerNode:
         # Set goal height based on passed on table height
         # TODO: Set these better
         torso_max = 0.7
-        torso_min = 0.3
+        #torso_min = 0.3
+        torso_min = 0.0
 
         current_torso_position = self.robot.states[self.robot.ZLIFT]['joint_angles']
-        torso_goal_position = current_torso_position + lift_link_delta_z
+	transform_offset = lift_link_z - current_torso_position
+	torso_goal_position = transform_offset + self.torso_z_offset - table_z
+        #torso_goal_position = current_torso_position + lift_link_delta_z
         torso_goal_position = (max(min(torso_max, torso_goal_position),
                                    torso_min))
+
         # rospy.logdebug('Moving torso to ' + str(torso_goal_position))
         # Multiply by 2.0, because of units of spine
         #self.robot.torso.set_pose(torso_goal_position)
@@ -2050,15 +2063,17 @@ class InitializePositionControllerNode:
         if which_arm == 'l':
             #self.l_arm_cart_pub.publish(pose)
             #posture_pub = self.l_arm_cart_posture_pub
-            print self.robot.computeIK(pose, self.robot.LEFT_ARM)
-            pl = self.l_pressure_listener
+            #print self.robot.computeIK(pose, self.robot.LEFT_ARM)
+            self.robot.computeIK(pose, self.robot.LEFT_ARM)
+            #pl = self.l_pressure_listener
 
 
         else:
             #self.r_arm_cart_pub.publish(pose)
             #posture_pub = self.r_arm_cart_posture_pub
-            print self.robot.computeIK(pose, self.robot.RIGHT_ARM)
-            pl = self.r_pressure_listener
+            self.robot.computeIK(pose, self.robot.RIGHT_ARM)
+            #print self.robot.computeIK(pose, self.robot.RIGHT_ARM)
+            #pl = self.r_pressure_listener
 
         arm_not_moving_count = 0
         r = rospy.Rate(self.move_cart_check_hz)

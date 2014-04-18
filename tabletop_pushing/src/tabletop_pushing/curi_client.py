@@ -53,7 +53,7 @@ import darci_arm_kinematics as dak
 # For move_arm
 from moveit_commander import RobotCommander, MoveGroupCommander, PlanningSceneInterface
 import moveit_msgs.msg
-
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 ##
 #Class DarciClient()
 #gives interface in python for controller to be similar to other MPC stuff we've done on Cody,
@@ -108,6 +108,8 @@ class DarciClient():
         # Values for the zlift
         self.zlift_pub = rospy.Publisher('/zlift_command', M3JointCmd)
         self.zlift_pos = None #initial setup
+
+	self.test_move_arm_pub = rospy.Publisher('/r_arm_controller/command', JointTrajectory)
 
         '''
         self.joint_angles = None
@@ -275,24 +277,46 @@ class DarciClient():
         eef_step = .01
         jump_thresh = 0
         avoid_collisions = True
-
-        '''
-        (plan, fraction) = group.compute_cartesian_path(
+	count = 0 
+	best_fraction = 0
+	fraction = 0
+	best_plan = None
+	while fraction < 0.9 and count < 30:
+            (plan, fraction) = group.compute_cartesian_path(
                                      waypoints,   # waypoints to follow
                                      eef_step,        # eef_step
                                      jump_thresh,   # jump_threshold
                                      avoid_collisions)         # collisions
-        '''
+	    if fraction > best_fraction:
+	        best_plan = plan
+                best_fraction = fraction
+
+	    count = count + 1
+  
         import pdb; pdb.set_trace()
+        jtm = JointTrajectory()
+        jtm.joint_names = plan.joint_trajectory.joint_names
+        jtm.points = []
+        for i in range(len(plan.joint_trajectory.points)):
+            jtp = JointTrajectoryPoint()
+            jtp.positions = plan.joint_trajectory.points[i].positions
+            jtp.time_from_start = rospy.Duration(1.0)
+            jtm.points.append(jtp)
+
+        self.test_move_arm_pub.publish(jtm)
+	
+ 
+        group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
         group.set_pose_target(poseMsg.pose)
         plan1 = group.plan()
-        display_trajectory = moveit_msgs.msg.DisplayTrajectory()
+        #display_trajectory = moveit_msgs.msg.DisplayTrajectory()
 
         #display_trajectory.trajectory_start = 
-        display_trajectory.trajectory.append(plan1)
-        self.display_trajectory_publisher.publish(display_trajectory);
+        #display_trajectory.trajectory.append(plan1)
+        #self.display_trajectory_publisher.publish(display_trajectory);
 
-        #group.go()
+        group.go()
+	#group.execute(plan)
         return plan.joint_trajectory.points
 
     def updateSendCmd(self, body_part):
