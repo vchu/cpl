@@ -74,6 +74,8 @@ _ARM_POSITIONS = {
     'zero_position' : [0.0]*7,
     'aright_arm_ready' : [0.0, 1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
     'aleft_arm_ready' : [0.0, -1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
+    'high_right_arm_ready' : [0.007, 1.951, -1.136, 1.97, 1.655, 0.06, 0.088],
+    'high_left_arm_ready' : [0.007, -1.951, 1.136, 1.97, -1.655, 0.06, 0.088],
     'right_arm_ready' : [-0.755, 0.543, 0.646, 2.12, 0.014, 0.0, 0.0],
     'left_arm_ready' : [-0.755, -0.543, -0.646, 2.12, 0.014, 0.0, 0.0],
     'old_right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
@@ -342,10 +344,27 @@ class InitializePositionControllerNode:
         self.arm_done_moving_count_thresh = rospy.get_param(
             '~not_moving_count_thresh', 30)
         self.base_frame_name = 'world'
+        self.move_cart_check_hz = rospy.get_param('~move_cart_check_hz', 100)
 
 
         self.tf_listener = tf.TransformListener()
 
+        # Set the controller to just the standard curi controller
+        self.base_cart_controller_name = '_arm_controller'
+        self.controller_state_msg = JointTrajectoryControllerState
+
+        '''
+        # Setup callbacks to keep track of controller state
+        rospy.Subscriber('/l'+self.base_cart_controller_name+'/state', self.controller_state_msg,
+                         self.l_arm_cart_state_callback)
+        rospy.Subscriber('/r'+self.base_cart_controller_name+'/state', self.controller_state_msg,
+                         self.r_arm_cart_state_callback)
+
+        rospy.Subscriber('/l'+self.base_vel_controller_name+'/state', self.vel_controller_state_msg,
+                         self.l_arm_vel_state_callback)
+        rospy.Subscriber('/r'+self.base_vel_controller_name+'/state', self.vel_controller_state_msg,
+                         self.r_arm_vel_state_callback)
+        '''
         # Setup service calls
         self.raise_and_look_serice = rospy.Service(
             'raise_and_look', RaiseAndLook, self.raise_and_look)
@@ -353,6 +372,12 @@ class InitializePositionControllerNode:
         self.gripper_pre_push_srv = rospy.Service(
             'gripper_pre_push', FeedbackPush, self.gripper_pre_push)
 
+        self.gripper_feedback_push_srv = rospy.Service(
+            'gripper_feedback_push', FeedbackPush, self.gripper_feedback_push)
+
+        self.gripper_feedback_post_push_srv = rospy.Service(
+            'gripper_feedback_post_push', FeedbackPush,
+            self.gripper_feedback_post_push)
 
     #
     # Initialization functions
@@ -1513,8 +1538,8 @@ class InitializePositionControllerNode:
         start_pose.header = request.start_point.header
         start_pose.pose.position.x = start_point.x + new_trans[0]
         start_pose.pose.position.y = start_point.y + new_trans[1]
-        #start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
-        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.08
+        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+        #start_pose.pose.position.z = start_point.z + new_trans[2] + 0.08
 
         wrist_pitch = 0.0625*pi
         q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
@@ -1533,6 +1558,7 @@ class InitializePositionControllerNode:
         '''
 
         self.use_gripper_place_joint_posture = True
+        '''
         if request.high_arm_init:
             #start_pose.pose.position.z = self.high_arm_init_z
             #start_pose.pose.position.z = self.robot.states[self.robot.ZLIFT]['joint_angles']
@@ -1544,10 +1570,14 @@ class InitializePositionControllerNode:
             #rospy.loginfo('Done moving to lower start point')
             #start_pose.pose.position.z = start_point.z
             # self.move_down_until_contact(which_arm)
-
-	    import pdb; pdb.set_trace()
+        '''
+        import pdb; pdb.set_trace()
 
         # Move to start pose
+        self.move_to_cart_pose(start_pose, which_arm)
+        response.failed_pre_position = False
+
+        '''
         if not self.move_to_cart_pose_ik(start_pose, which_arm):
             rospy.logwarn('IK Failed, not at desired initial pose')
             response.failed_pre_position = True
@@ -1556,8 +1586,11 @@ class InitializePositionControllerNode:
         else:
             response.failed_pre_position = False
 
+        '''
+
         rospy.loginfo('Done moving to start point')
         self.use_gripper_place_joint_posture = False
+        '''
         if is_pull:
             rospy.loginfo('Moving forward to grasp pose')
             pose_err, err_dist = self.move_relative_gripper(
@@ -1567,6 +1600,7 @@ class InitializePositionControllerNode:
             rospy.loginfo('Closing grasp for pull')
             res = robot_gripper.close(block=True, effort=self.max_close_effort)
             rospy.loginfo('Done closing gripper')
+        '''
 
         return response
 
@@ -2063,30 +2097,35 @@ class InitializePositionControllerNode:
         # Currently no switching...
         #self.switch_to_cart_controllers()  
         if which_arm == 'l':
-            #self.l_arm_cart_pub.publish(pose)
-            #posture_pub = self.l_arm_cart_posture_pub
             #print self.robot.computeIK(pose, self.robot.LEFT_ARM)
-            self.robot.computeIK(pose, self.robot.LEFT_ARM)
+            self.robot.computeIK_moveit(pose, self.robot.LEFT_ARM)
             #pl = self.l_pressure_listener
 
-
         else:
-            #self.r_arm_cart_pub.publish(pose)
-            #posture_pub = self.r_arm_cart_posture_pub
-            self.robot.computeIK(pose, self.robot.RIGHT_ARM)
+            self.robot.computeIK_moveit(pose, self.robot.RIGHT_ARM)
             #print self.robot.computeIK(pose, self.robot.RIGHT_ARM)
             #pl = self.r_pressure_listener
 
         arm_not_moving_count = 0
-        r = rospy.Rate(self.move_cart_check_hz)
-        pl.rezero()
-        pl.set_threshold(pressure)
+        #r = rospy.Rate(self.move_cart_check_hz)
+
+        # This checks if pushing over a certain "threshold of pressure"
+        # Currently do not check
+        # TODO: Add in force/torque checking later
+        #pl.rezero()
+        #pl.set_threshold(pressure)
+
+        # I don't think this is needed since moveit only
+        # returns when the arm has stopped moving
+        '''
         while arm_not_moving_count < done_moving_count_thresh:
             if not self.arm_moving_cart(which_arm):
                 arm_not_moving_count += 1
             else:
                 arm_not_moving_count = 0
+
             # Command posture
+            # Send the posture again?
             m = self.get_desired_posture(which_arm)
             posture_pub.publish(m)
 
@@ -2097,63 +2136,18 @@ class InitializePositionControllerNode:
                 rospy.loginfo('Exceeded pressure contact thresh...')
                 # TODO: Let something know?
             r.sleep()
-
+        '''
         # Return pose error
+        '''
         if which_arm == 'l':
             arm_error = self.l_arm_x_err
         else:
             arm_error = self.r_arm_x_err
         error_dist = sqrt(arm_error.linear.x**2 + arm_error.linear.y**2 +
                           arm_error.linear.z**2)
-        # rospy.loginfo('Move cart gripper error dist: ' + str(error_dist)+'\n')
-        # rospy.loginfo('Move cart gripper error: ' + str(arm_error.linear)+'\n'+str(arm_error.angular))
-        return (arm_error, error_dist)
-
-    def move_to_cart_pose_old(self, pose, which_arm,
-                          done_moving_count_thresh=None, pressure=1000):
-
-        if done_moving_count_thresh is None:
-            done_moving_count_thresh = self.arm_done_moving_count_thresh
-
-        # Currently no switching...
-        #self.switch_to_cart_controllers()  
-        if which_arm == 'l':
-            self.l_arm_cart_pub.publish(pose)
-            posture_pub = self.l_arm_cart_posture_pub
-            pl = self.l_pressure_listener
-        else:
-            self.r_arm_cart_pub.publish(pose)
-            posture_pub = self.r_arm_cart_posture_pub
-            pl = self.r_pressure_listener
-
-        arm_not_moving_count = 0
-        r = rospy.Rate(self.move_cart_check_hz)
-        pl.rezero()
-        pl.set_threshold(pressure)
-        while arm_not_moving_count < done_moving_count_thresh:
-            if not self.arm_moving_cart(which_arm):
-                arm_not_moving_count += 1
-            else:
-                arm_not_moving_count = 0
-            # Command posture
-            m = self.get_desired_posture(which_arm)
-            posture_pub.publish(m)
-
-            if pl.check_safety_threshold():
-                rospy.loginfo('Exceeded pressure safety thresh!\n')
-                break
-            if pl.check_threshold():
-                rospy.loginfo('Exceeded pressure contact thresh...')
-                # TODO: Let something know?
-            r.sleep()
-
-        # Return pose error
-        if which_arm == 'l':
-            arm_error = self.l_arm_x_err
-        else:
-            arm_error = self.r_arm_x_err
-        error_dist = sqrt(arm_error.linear.x**2 + arm_error.linear.y**2 +
-                          arm_error.linear.z**2)
+        '''
+        arm_error = 0
+        error_dist = 0 # Hack for now
         # rospy.loginfo('Move cart gripper error dist: ' + str(error_dist)+'\n')
         # rospy.loginfo('Move cart gripper error: ' + str(arm_error.linear)+'\n'+str(arm_error.angular))
         return (arm_error, error_dist)

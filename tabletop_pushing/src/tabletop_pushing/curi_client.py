@@ -48,12 +48,14 @@ import threading
 import copy
 from hrl_lib import transforms as tr
 from collections import *
-import darci_arm_kinematics as dak
+import curi_arm_kinematics as dak
 
 # For move_arm
 from moveit_commander import RobotCommander, MoveGroupCommander, PlanningSceneInterface
 import moveit_msgs.msg
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from moveit_msgs.msg import RobotTrajectory
+
 ##
 #Class DarciClient()
 #gives interface in python for controller to be similar to other MPC stuff we've done on Cody,
@@ -247,6 +249,7 @@ class DarciClient():
     
         # Currently doesn't work because q_init is not computed correctly
         # Convert the pose to what IK expects
+        # TODO: Figure out transform frame
         pose = poseMsg.pose
         pos = np.ones((3,1)) # Expects 3x1 shape
         pos[0] = pose.position.x
@@ -273,7 +276,44 @@ class DarciClient():
             rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
             return None
 
-        '''
+        # Set just the position of the target currently
+        # TODO: Fix the orientation
+        group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
+
+        # Init vars
+        plan = RobotTrajectory()
+        count = 1
+        # Plan until we get a result - only 25 iterations currently
+        while plan.joint_trajectory.points == [] and count < 20:
+            print "Planning"
+            plan = group.plan()
+
+            # Actually excecute action
+            group.execute(plan)
+
+            # Keep track of attempts
+            count = count + 1
+            rospy.loginfo("Plan attempt: %d" % count)
+        
+        # return the plan
+        return plan
+
+    def computeIK_moveit_cart(self, poseMsg, body_part):
+
+        # Uses move arm to do the planning
+        scene = PlanningSceneInterface()
+        robot = RobotCommander()
+        rospy.sleep(1)
+        if body_part == self.RIGHT_ARM:
+            group = MoveGroupCommander("right_arm")
+        elif body_part == self.LEFT_ARM:
+            group = MoveGroupCommander("left_arm")
+        else:
+            rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
+            return None
+
+        # Using cartesian paths.  Currently do not need for
+        # just one point.  Maybe later for actual pushing vector?
         waypoints = [poseMsg.pose]
 
         eef_step = .01
@@ -294,8 +334,9 @@ class DarciClient():
                 best_fraction = fraction
 
 	    count = count + 1
-  
-        import pdb; pdb.set_trace()
+
+        # If we want to use the default controller rather than the move-it
+        # controller to perform the action
         jtm = JointTrajectory()
         jtm.joint_names = plan.joint_trajectory.joint_names
         jtm.points = []
@@ -305,20 +346,7 @@ class DarciClient():
             jtp.time_from_start = rospy.Duration(1.0)
             jtm.points.append(jtp)
 
-        self.test_move_arm_pub.publish(jtm)
-	
-        ''' 
-        group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
-        plan = group.plan()
-        #group.set_pose_target(poseMsg.pose)
-        #display_trajectory = moveit_msgs.msg.DisplayTrajectory()
-
-        #display_trajectory.trajectory_start = 
-        #display_trajectory.trajectory.append(plan1)
-        #self.display_trajectory_publisher.publish(display_trajectory);
-
-        group.execute(plan)
-        return plan.joint_trajectory.points
+        return jtm
 
     def updateSendCmd(self, body_part):
 
