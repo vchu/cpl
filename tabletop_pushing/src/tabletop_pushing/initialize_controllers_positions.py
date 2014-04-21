@@ -353,6 +353,9 @@ class InitializePositionControllerNode:
         self.base_cart_controller_name = '_arm_controller'
         self.controller_state_msg = JointTrajectoryControllerState
 
+        # Global counters
+        self.goal_cb_count = 0
+
         '''
         # Setup callbacks to keep track of controller state
         rospy.Subscriber('/l'+self.base_cart_controller_name+'/state', self.controller_state_msg,
@@ -372,12 +375,18 @@ class InitializePositionControllerNode:
         self.gripper_pre_push_srv = rospy.Service(
             'gripper_pre_push', FeedbackPush, self.gripper_pre_push)
 
+        self.gripper_simple_push_srv = rospy.Service(
+            'gripper_simple_push', FeedbackPush, self.simple_push)
+
+        '''
+        # currently not implemented
         self.gripper_feedback_push_srv = rospy.Service(
             'gripper_feedback_push', FeedbackPush, self.gripper_feedback_push)
 
         self.gripper_feedback_post_push_srv = rospy.Service(
             'gripper_feedback_post_push', FeedbackPush,
             self.gripper_feedback_post_push)
+        '''
 
     #
     # Initialization functions
@@ -470,11 +479,29 @@ class InitializePositionControllerNode:
         feedback_cb = self.tracker_feedback_push
         return self.feedback_push_behavior(request, feedback_cb)
 
+    def simple_push(self, request):
+        #feedback_cb = self.tracker_feedback_push
+        feedback_cb = None
+        return self.simple_push_behavior(request, feedback_cb)
+
+    def simple_push_behavior(self, request, feedback_cb):
+        response = FeedbackPushResponse()
+        start_point = request.start_point.point
+        wrist_yaw = request.wrist_yaw
+
+        if request.left_arm:
+            which_arm = 'l'
+        else:
+            which_arm = 'r'
+
+        import pdb; pdb.set_trace()
+
     def feedback_push_behavior(self, request, feedback_cb):
         response = FeedbackPushResponse()
         start_point = request.start_point.point
         wrist_yaw = request.wrist_yaw
 
+        '''
         self.use_learn_io = (_USE_LEARN_IO and request.learn_out_file_name != '')
         if self.use_learn_io:
             self.learn_io = ControlAnalysisIO()
@@ -486,7 +513,8 @@ class InitializePositionControllerNode:
             self.target_trajectory_io.open_out_file(trajectory_file_name)
             self.mpc_q_star_io = MPCSolutionIO()
             self.mpc_q_star_io.open_out_file(mpc_file_name)
-
+        '''
+        
         if request.check_model_performance:
             self.check_model_performance = True
             self.used_model_name = None
@@ -499,21 +527,27 @@ class InitializePositionControllerNode:
 
         self.active_arm = which_arm
         rospy.loginfo('Creating ac')
+
         ac = actionlib.SimpleActionClient('push_tracker',
                                           VisFeedbackPushTrackingAction)
         rospy.loginfo('waiting for server')
         if not ac.wait_for_server(rospy.Duration(5.0)):
             rospy.loginfo('Failed to connect to push tracker server')
+            '''
             if self.use_learn_io:
                 self.learn_io.close_out_file()
             if _SAVE_MPC_DATA:
                 self.mpc_q_star_io.close_out_file()
                 self.target_trajectory_io.close_out_file()
+            '''
             return response
         ac.cancel_all_goals()
         self.feedback_count = 0
         self.goal_cb_count += 1
+        
+        import pdb; pdb.set_trace()
 
+        # Control arm using velocity controllers
         if not _OFFLINE:
             self.switch_to_vel_controllers()
             self.stop_moving_vel(which_arm)
@@ -762,233 +796,6 @@ class InitializePositionControllerNode:
             self.update_vel(update_twist, which_arm)
         self.feedback_count += 1
 
-    def open_loop_sqp_controller(self, goal, push_request, which_arm, ac):
-        if _FORCE_SINGLE_SQP_SOLVE:
-            return self.open_loop_sqp_controller_batch(goal, push_request, which_arm, ac)
-        else:
-            return self.open_loop_sqp_controller_segments(goal, push_request, which_arm, ac)
-
-    def open_loop_sqp_controller_batch(self, goal, push_request, which_arm, ac):
-        '''
-        Returns True if the open loop control was correctly applied, False if fails or aborted
-        '''
-        # Generate push trajectory
-        trajectory_generator = PiecewiseLinearTrajectoryGenerator(self.mpc_max_step_size,
-                                                                  self.min_num_mpc_trajectory_steps)
-        pose_list = [goal.desired_pose]
-        x_d = trajectory_generator.generate_trajectory(push_request.obj_start_pose, pose_list)
-
-        if which_arm == 'l':
-            ee_pose = self.l_arm_pose
-        else:
-            ee_pose = self.r_arm_pose
-        if _OFFLINE:
-            cur_pose_tool_frame = PoseStamped()
-            cur_pose_tool_frame.pose.position.x = 0.0
-            cur_pose_tool_frame.pose.position.y = 0.0
-            cur_pose_tool_frame.pose.position.z = 0.0
-            cur_pose_tool_frame.pose.orientation.x = 0.0
-            cur_pose_tool_frame.pose.orientation.y = 0.0
-            cur_pose_tool_frame.pose.orientation.z = 0.0
-            cur_pose_tool_frame.pose.orientation.w = 1.0
-            if which_arm == 'l':
-                cur_pose_tool_frame.header.frame_id = 'l_gripper_tool_frame'
-            else:
-                cur_pose_tool_frame.header.frame_id = 'r_gripper_tool_frame'
-            ee_pose = self.tf_listener.transformPose('torso_lift_link', cur_pose_tool_frame)
-
-
-        [_, _, ee_phi] = tf.transformations.euler_from_quaternion(np.array([ee_pose.pose.orientation.x,
-                                                                            ee_pose.pose.orientation.y,
-                                                                            ee_pose.pose.orientation.z,
-                                                                            ee_pose.pose.orientation.w]))
-        x0 = np.asarray([push_request.obj_start_pose.x, push_request.obj_start_pose.y,
-                         push_request.obj_start_pose.theta,
-                         ee_pose.pose.position.x, ee_pose.pose.position.y, ee_phi])
-
-        # Get push plan using SQP via MPC class
-        control_tape = []
-        self.SQPOpt.H = len(x_d)-1
-        self.SQPOpt.regenerate_bounds()
-        rospy.loginfo('Solving for trajectory of length ' + str(len(x_d)))
-        q_star = self.SQPOpt.feedbackControl(x0, x_d)
-
-        # Loop through the plan converting the SQP results into twist messages
-        [x_star, u_star] = get_x_u_from_q(q_star, x0, self.SQPOpt.H, self.SQPOpt.n, self.SQPOpt.m)
-        for U_k in u_star:
-            u_x = U_k[0]
-            u_y = U_k[1]
-            u_phi = U_k[2]
-            u = TwistStamped()
-            u.header.frame_id = 'torso_lift_link'
-            u.twist.linear.x = max( min(u_x, self.mpc_u_max), -self.mpc_u_max)
-            u.twist.linear.y = max( min(u_y, self.mpc_u_max), -self.mpc_u_max)
-            u.twist.linear.z = 0.0
-            u.twist.angular.x = 0.0
-            u.twist.angular.y = 0.0
-            if push_request.controller_name == SQP_NAIVE_LINEAR_DYN:
-                u.twist.angular.z = 0.0
-            else:
-                u.twist.angular.z = max( min(u_phi, self.mpc_u_max_angular), -self.mpc_u_max_angular)
-            control_tape.append(u)
-
-        # TODO: Setup data logging here
-        if _SAVE_MPC_DATA:
-            if _BUFFER_DATA:
-                self.target_trajectory_io.buffer_line(0, x_d)
-                self.mpc_q_star_io.buffer_line(0, q_star)
-            else:
-                self.target_trajectory_io.write_line(0, x_d)
-                self.mpc_q_star_io.write_line(0, q_star)
-
-        # Send goal information to save visuale data
-        rospy.loginfo('Sending goal of: ' + str(goal.desired_pose))
-        goal.open_loop_push = True
-        ac.send_goal(goal)
-        rospy.loginfo('Sent goal')
-
-        # Run the control tape
-        r_out = rospy.Rate(100)
-        for play_count, u in enumerate(control_tape):
-            if play_count % 5 == 0:
-                rospy.loginfo('q_dot: (' +
-                              str(u.twist.linear.x) + ', ' +
-                              str(u.twist.linear.y) + ', ' +
-                              str(u.twist.linear.z) + ')')
-                rospy.loginfo('omega: (' +
-                              str(u.twist.angular.x) + ', ' +
-                              str(u.twist.angular.y) + ', ' +
-                              str(u.twist.angular.z) + ')\n')
-            timeout_at = rospy.get_time() + self.mpc_delta_t
-
-            # Apply control
-            while timeout_at > rospy.get_time():
-                u.header.stamp = rospy.Time.now()
-                self.update_vel(u, which_arm)
-                r_out.sleep()
-        self.stop_moving_vel(which_arm)
-
-        return True
-
-    def open_loop_sqp_controller_segments(self, goal, push_request, which_arm, ac):
-        '''
-        Returns True if the open loop control was correctly applied, False if fails or aborted
-        '''
-        # Generate push trajectory
-        trajectory_generator = PiecewiseLinearTrajectoryGenerator(self.mpc_max_step_size,
-                                                                  self.min_num_mpc_trajectory_steps)
-        pose_list = [goal.desired_pose]
-        x_d = trajectory_generator.generate_trajectory(push_request.obj_start_pose, pose_list)
-
-        if which_arm == 'l':
-            ee_pose = self.l_arm_pose
-        else:
-            ee_pose = self.r_arm_pose
-        if _OFFLINE:
-            cur_pose_tool_frame = PoseStamped()
-            cur_pose_tool_frame.pose.position.x = 0.0
-            cur_pose_tool_frame.pose.position.y = 0.0
-            cur_pose_tool_frame.pose.position.z = 0.0
-            cur_pose_tool_frame.pose.orientation.x = 0.0
-            cur_pose_tool_frame.pose.orientation.y = 0.0
-            cur_pose_tool_frame.pose.orientation.z = 0.0
-            cur_pose_tool_frame.pose.orientation.w = 1.0
-            if which_arm == 'l':
-                cur_pose_tool_frame.header.frame_id = 'l_gripper_tool_frame'
-            else:
-                cur_pose_tool_frame.header.frame_id = 'r_gripper_tool_frame'
-            ee_pose = self.tf_listener.transformPose('torso_lift_link', cur_pose_tool_frame)
-
-
-        [_, _, ee_phi] = tf.transformations.euler_from_quaternion(np.array([ee_pose.pose.orientation.x,
-                                                                            ee_pose.pose.orientation.y,
-                                                                            ee_pose.pose.orientation.z,
-                                                                            ee_pose.pose.orientation.w]))
-        x0 = np.asarray([push_request.obj_start_pose.x, push_request.obj_start_pose.y,
-                         push_request.obj_start_pose.theta,
-                         ee_pose.pose.position.x, ee_pose.pose.position.y, ee_phi])
-
-        # Get push plan using SQP via MPC class
-        # HACK: Turned off segments and just solve for the full trajectory again, now that things go faster...
-        H = self.open_loop_segment_length
-        num_segments = int(ceil(float(len(x_d))/H))
-
-        control_tape = []
-        q_super_star = np.asarray([])
-        # Solve for each segment
-        for i in xrange(num_segments):
-            # Get current segment of the desired chain x_d_i
-            x_d_i = x_d[i*H:(i+1)*H]
-            # set H to full sequence length x_d_i
-            if len(x_d_i) < 2:
-                rospy.logwarn('x_d_i is too short! Breaking!')
-                break
-            self.SQPOpt.H = len(x_d_i)-1
-            self.SQPOpt.regenerate_bounds()
-            rospy.loginfo('Solving optimization for push plan segment ' + str(i+1) + ' of ' + str(num_segments))
-            rospy.loginfo('Current segment has ' + str(len(x_d_i)) + ' steps out of a total ' + str(len(x_d)) )
-            q_star = self.SQPOpt.feedbackControl(x0, x_d_i)
-            q_super_star = np.concatenate((q_super_star, q_star))
-
-            # Loop through the plan converting the SQP results into twist messages
-            [x_star, u_star] = get_x_u_from_q(q_star, x0, self.SQPOpt.H, self.SQPOpt.n, self.SQPOpt.m)
-            for U_k in u_star:
-                u_x = U_k[0]
-                u_y = U_k[1]
-                u_phi = U_k[2]
-                u = TwistStamped()
-                u.header.frame_id = 'torso_lift_link'
-                u.twist.linear.x = max( min(u_x, self.mpc_u_max), -self.mpc_u_max)
-                u.twist.linear.y = max( min(u_y, self.mpc_u_max), -self.mpc_u_max)
-                u.twist.linear.z = 0.0
-                u.twist.angular.x = 0.0
-                u.twist.angular.y = 0.0
-                u.twist.angular.z = max( min(u_phi, self.mpc_u_max_angular), -self.mpc_u_max_angular)
-                control_tape.append(u)
-
-            # update x0 based on final poase in q_star
-            x0 = np.asarray(x_star[-1])
-
-        # TODO: Setup data logging here
-        if _SAVE_MPC_DATA:
-            if _BUFFER_DATA:
-                self.target_trajectory_io.buffer_line(0, x_d)
-                self.mpc_q_star_io.buffer_line(0, q_super_star)
-            else:
-                self.target_trajectory_io.write_line(0, x_d)
-                self.mpc_q_star_io.write_line(0, q_super_star)
-
-        # Send goal information to save visuale data
-        rospy.loginfo('Sending goal of: ' + str(goal.desired_pose))
-        goal.open_loop_push = True
-        ac.send_goal(goal)
-        rospy.loginfo('Sent goal')
-
-        # Run the control tape
-        r_out = rospy.Rate(100)
-        for play_count, u in enumerate(control_tape):
-            if play_count % H == 0:
-                rospy.loginfo('Executing segment: ' + str(play_count/H+1))
-            # if play_count % 5 == 0:
-            #     rospy.loginfo('q_dot: (' +
-            #                   str(u.twist.linear.x) + ', ' +
-            #                   str(u.twist.linear.y) + ', ' +
-            #                   str(u.twist.linear.z) + ')')
-            #     rospy.loginfo('omega: (' +
-            #                   str(u.twist.angular.x) + ', ' +
-            #                   str(u.twist.angular.y) + ', ' +
-            #                   str(u.twist.angular.z) + ')\n')
-            timeout_at = rospy.get_time() + self.mpc_delta_t
-
-            # Apply control
-            while timeout_at > rospy.get_time():
-                u.header.stamp = rospy.Time.now()
-                self.update_vel(u, which_arm)
-                r_out.sleep()
-        self.stop_moving_vel(which_arm)
-
-        return True
-
     def open_loop_straight_line_controller(self, goal, push_request, which_arm):
         # Get goal vector
         x_error = goal.desired_pose.x - push_request.obj_start_pose.x
@@ -1083,16 +890,6 @@ class InitializePositionControllerNode:
             rospy.loginfo('heading_rotate: (' + str(u.twist.angular.x) + ')')
         return u
 
-    def spinCircleStuff(self, cur_state, desired_state, which_arm):
-        r = 1.0 # Spin radius
-        T = 32
-        t = 0 # TODO: Increment / send in
-        theta_dot = 2*pi/T # Constant rotational speed
-        theta = theta_dot*t # Angle around spin circle
-        x_circle = r*sin(theta)
-        y_circle = r*cos(theta)
-        x_dot_circle = r*cos(theta)*theta_dot
-        y_dot_circle = -r*sin(theta)*theta_dot
 
     def centroidAlignmentController(self, cur_state, desired_state, ee_pose):
         u = TwistStamped()
@@ -1210,166 +1007,6 @@ class InitializePositionControllerNode:
             rospy.loginfo('q_goal_dot: (' + str(goal_x_dot) + ', ' + str(goal_y_dot) + ')')
         return u
 
-    def affineFeedbackController(self, cur_state, A, b):
-        u = TwistStamped()
-        u.header.frame_id = 'torso_lift_link'
-        u.header.stamp = rospy.Time.now()
-        u.twist.linear.z = 0.0
-        u.twist.angular.x = 0.0
-        u.twist.angular.y = 0.0
-        u.twist.angular.z = 0.0
-
-        X = np.asarray(cur_state.x)
-
-        u_t = A*X+b
-        # TODO: Make this dependent on the specified control state
-        u.twist.linear.x = u_t[0]
-        u.twist.linear.y = u_t[1]
-        return u
-
-    def RBFFeedbackController(self, cur_state):
-        u = TwistStamped()
-        u.header.frame_id = 'torso_lift_link'
-        u.header.stamp = rospy.Time.now()
-        u.twist.linear.z = 0.0
-        u.twist.angular.x = 0.0
-        u.twist.angular.y = 0.0
-        u.twist.angular.z = 0.0
-
-        # Replace angles with sin(theta), cos(theta)
-        # TODO: Double check this after pilco change
-        ndx = [4]
-        X = trigAugState(np.asarray(cur_state.x), ndx, True)
-        D = np.zeros((P.shape[1], 1))
-        u_t = self.RBF.feedbackControl(X)
-        # TODO: Make this mapping dependent on the specified control state, read from file
-        u.twist.linear.x = u_t[0]
-        u.twist.linear.y = u_t[1]
-        return u
-
-    def MPCFeedbackController(self, cur_state, ee_pose, desired_pose):
-        # TODO: Add ability to switch model at each feedback call (using model predictive error, etc)
-
-        k0 = cur_state.header.seq
-        # Get updated list for forward trajectory
-        pose_list = [desired_pose]
-        x_d_i = self.trajectory_generator.generate_trajectory(cur_state.x, pose_list)
-
-        self.MPC.H = min(self.mpc_lookahead_horizon, len(x_d_i)-1)
-        self.MPC.regenerate_bounds()
-        rospy.loginfo('MPC.H = ' + str(self.MPC.H))
-
-        # TODO: Choose if XTRA is used from SVR dynamics model flags
-        # Feature vector for the dynamics model
-        if _USE_SHAPE_INFO_IN_SVM:
-            xtra = cur_state.shape_descriptor
-        else:
-            xtra = []
-        [_, _, ee_phi] = tf.transformations.euler_from_quaternion(np.array([ee_pose.pose.orientation.x,
-                                                                            ee_pose.pose.orientation.y,
-                                                                            ee_pose.pose.orientation.z,
-                                                                            ee_pose.pose.orientation.w]))
-
-        x0 = [cur_state.x.x, cur_state.x.y, cur_state.x.theta,
-              ee_pose.pose.position.x, ee_pose.pose.position.y, ee_phi]
-        q_star = self.MPC.feedbackControl(x0, x_d_i, xtra)
-
-        if _SAVE_MPC_DATA:
-            if _BUFFER_DATA:
-                self.target_trajectory_io.buffer_line(k0, x_d_i)
-                self.mpc_q_star_io.buffer_line(k0, q_star)
-            else:
-                self.target_trajectory_io.write_line(k0, x_d_i)
-                self.mpc_q_star_io.write_line(k0, q_star)
-
-        if self.check_model_performance:
-            u_k = [max( min(q_star[0], self.mpc_u_max), -self.mpc_u_max),
-                   max( min(q_star[1], self.mpc_u_max), -self.mpc_u_max),
-                   max( min(q_star[2], self.mpc_u_max_angular), -self.mpc_u_max_angular)]
-            self.trajectory_to_check.append((x0, u_k))
-
-        # Use previous to initialize at next time step
-        self.MPC.init_from_previous = True
-
-        u = TwistStamped()
-        u.header.frame_id = 'torso_lift_link'
-        u.header.stamp = rospy.Time.now()
-        u.twist.linear.x = max( min(q_star[0], self.mpc_u_max), -self.mpc_u_max)
-        u.twist.linear.y = max( min(q_star[1], self.mpc_u_max), -self.mpc_u_max)
-        if fabs(u.twist.linear.x) < 0.001:
-            u.twist.linear.x = 0.0
-        if fabs(u.twist.linear.y) < 0.001:
-            u.twist.linear.y = 0.0
-        u.twist.linear.z = 0.0
-        u.twist.angular.x = 0.0
-        u.twist.angular.y = 0.0
-        if cur_state.controller_name == MPC_NAIVE_LINEAR_DYN:
-            u.twist.angular.z = 0.0
-        else:
-            u.twist.angular.z = max( min(q_star[2], self.mpc_u_max_angular), -self.mpc_u_max_angular)
-        return u
-    #
-    # Post behavior functions
-    #
-    def overhead_feedback_post_push(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-
-        if request.left_arm:
-            ready_joints = _ARM_POSITIONS['left_arm_ready']
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_PULL_READY_JOINTS
-            which_arm = 'l'
-            wrist_pitch = 0.5*pi
-            robot_gripper = self.robot.left_gripper
-        else:
-            ready_joints = _ARM_POSITIONS['right_arm_ready']
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_PULL_READY_JOINTS
-            which_arm = 'r'
-            wrist_pitch = -0.5*pi
-            robot_gripper = self.robot.right_gripper
-
-        rospy.logdebug('Moving gripper up')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([-self.gripper_raise_dist, 0.0, 0.0]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.logdebug('Done moving up')
-        rospy.logdebug('Pushing reverse')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, 0.0, -self.gripper_push_reverse_dist]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.loginfo('Done pushing reverse')
-
-
-        rospy.logdebug('Moving up to end point')
-        wrist_yaw = request.wrist_yaw
-        end_pose = PoseStamped()
-        end_pose.header = request.start_point.header
-
-        # Move straight up to point above the current EE pose
-        if request.left_arm:
-            cur_pose = self.l_arm_pose
-        else:
-            cur_pose = self.r_arm_pose
-
-        end_pose.pose.position.x = cur_pose.pose.position.x
-        end_pose.pose.position.y = cur_pose.pose.position.y
-        end_pose.pose.position.z = self.high_arm_init_z
-        q = tf.transformations.quaternion_from_euler(0.0, 0.5*pi, wrist_yaw)
-        end_pose.pose.orientation.x = q[0]
-        end_pose.pose.orientation.y = q[1]
-        end_pose.pose.orientation.z = q[2]
-        end_pose.pose.orientation.w = q[3]
-        self.move_to_cart_pose(end_pose, which_arm,
-                               self.post_move_count_thresh)
-        rospy.loginfo('Done moving up to end point')
-
-        if request.open_gripper:
-            res = robot_gripper.close(block=True, effort=self.max_close_effort)
-        self.reset_arm_pose(True, which_arm, request.high_arm_init)
-        return response
 
     def gripper_feedback_post_push(self, request):
         response = FeedbackPushResponse()
@@ -1443,67 +1080,6 @@ class InitializePositionControllerNode:
         self.reset_arm_pose(True, which_arm, request.high_arm_init)
         return response
 
-    def gripper_feedback_post_sweep(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_PULL_READY_JOINTS
-            which_arm = 'l'
-            robot_gripper = self.robot.left_gripper
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_PULL_READY_JOINTS
-            which_arm = 'r'
-            robot_gripper = self.robot.right_gripper
-
-        # TODO: Make this better
-        rospy.logdebug('Moving gripper up')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, -self.gripper_raise_dist, 0.0]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.logdebug('Done moving up')
-        rospy.logdebug('Sweeping reverse')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, 0.0, -self.gripper_push_reverse_dist]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.loginfo('Done sweeping reverse')
-
-        rospy.logdebug('Moving up to end point')
-        wrist_yaw = request.wrist_yaw
-        end_pose = PoseStamped()
-        end_pose.header = request.start_point.header
-
-        # Move straight up to point above the current EE pose
-        if request.left_arm:
-            cur_pose = self.l_arm_pose
-        else:
-            cur_pose = self.r_arm_pose
-
-        end_pose.pose.position.x = cur_pose.pose.position.x
-        end_pose.pose.position.y = cur_pose.pose.position.y
-        end_pose.pose.position.z = self.high_arm_init_z
-        q = tf.transformations.quaternion_from_euler(0.5*pi, 0.0, wrist_yaw)
-        end_pose.pose.orientation.x = q[0]
-        end_pose.pose.orientation.y = q[1]
-        end_pose.pose.orientation.z = q[2]
-        end_pose.pose.orientation.w = q[3]
-        self.move_to_cart_pose(end_pose, which_arm,
-                               self.post_move_count_thresh)
-        rospy.loginfo('Done moving up to end point')
-
-        if request.open_gripper:
-            rospy.loginfo('Closing gripper')
-            res = robot_gripper.close(block=True, effort=self.max_close_effort)
-            rospy.loginfo('Done closing gripper')
-
-        self.reset_arm_pose(True, which_arm, request.high_arm_init)
-        return response
-
     #
     # Pre behavior functions
     #
@@ -1515,14 +1091,10 @@ class InitializePositionControllerNode:
 
         if request.left_arm:
             ready_joints = _ARM_POSITIONS['left_arm_ready']
-            #if request.high_arm_init:
-            #    ready_joints = LEFT_ARM_HIGH_PUSH_READY_JOINTS
             which_arm = 'l'
             #robot_gripper = self.robot.left_gripper
         else:
             ready_joints = _ARM_POSITIONS['right_arm_ready']
-            #if request.high_arm_init:
-            #    ready_joints = RIGHT_ARM_HIGH_PUSH_READY_JOINTS
             which_arm = 'r'
             #robot_gripper = self.robot.right_gripper
 
@@ -1558,182 +1130,13 @@ class InitializePositionControllerNode:
         '''
 
         self.use_gripper_place_joint_posture = True
-        '''
-        if request.high_arm_init:
-            #start_pose.pose.position.z = self.high_arm_init_z
-            #start_pose.pose.position.z = self.robot.states[self.robot.ZLIFT]['joint_angles']
-            self.move_to_cart_pose(start_pose, which_arm)
-            rospy.logdebug('Done moving to start point')
-            # Change z to lower arm to table
-            #start_pose.pose.position.z = self.lower_arm_init_z
-            #self.move_to_cart_pose(start_pose, which_arm)
-            #rospy.loginfo('Done moving to lower start point')
-            #start_pose.pose.position.z = start_point.z
-            # self.move_down_until_contact(which_arm)
-        '''
-        import pdb; pdb.set_trace()
 
         # Move to start pose
         self.move_to_cart_pose(start_pose, which_arm)
         response.failed_pre_position = False
 
-        '''
-        if not self.move_to_cart_pose_ik(start_pose, which_arm):
-            rospy.logwarn('IK Failed, not at desired initial pose')
-            response.failed_pre_position = True
-            # self.move_to_cart_pose(start_pose, which_arm, self.pre_push_count_thresh)
-            return response
-        else:
-            response.failed_pre_position = False
-
-        '''
-
         rospy.loginfo('Done moving to start point')
         self.use_gripper_place_joint_posture = False
-        '''
-        if is_pull:
-            rospy.loginfo('Moving forward to grasp pose')
-            pose_err, err_dist = self.move_relative_gripper(
-                np.matrix([self.gripper_pull_forward_dist, 0, 0]).T, which_arm,
-                move_cart_count_thresh=self.post_move_count_thresh)
-
-            rospy.loginfo('Closing grasp for pull')
-            res = robot_gripper.close(block=True, effort=self.max_close_effort)
-            rospy.loginfo('Done closing gripper')
-        '''
-
-        return response
-
-    def gripper_pre_sweep(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_HIGH_SWEEP_READY_JOINTS
-            which_arm = 'l'
-            wrist_roll = -pi
-            robot_gripper = self.robot.left_gripper
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_HIGH_SWEEP_READY_JOINTS
-            which_arm = 'r'
-            wrist_roll = 0.0
-            robot_gripper = self.robot.right_gripper
-
-        if request.open_gripper:
-            res = robot_gripper.open(block=True, position=0.9)
-            raw_input('Waiting for input to close gripper: ')
-            print '\n'
-            res = robot_gripper.close(block=True, effort=self.max_close_effort)
-
-        start_pose = PoseStamped()
-        start_pose.header = request.start_point.header
-        start_pose.pose.position.x = start_point.x
-        start_pose.pose.position.y = start_point.y
-        start_pose.pose.position.z = start_point.z
-        q = tf.transformations.quaternion_from_euler(0.5*pi, 0.0, wrist_yaw)
-        start_pose.pose.orientation.x = q[0]
-        start_pose.pose.orientation.y = q[1]
-        start_pose.pose.orientation.z = q[2]
-        start_pose.pose.orientation.w = q[3]
-
-
-        rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
-        self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
-        # Rotate wrist before moving to position
-        rospy.logdebug('Rotating wrist for sweep')
-        arm_pose = self.get_arm_joint_pose(which_arm)
-        arm_pose[-1] =  wrist_roll
-        self.set_arm_joint_pose(arm_pose, which_arm, nsecs=1.0)
-
-        if request.high_arm_init:
-            # Move to offset pose above the table
-            start_pose.pose.position.z = self.high_arm_init_z
-            self.move_to_cart_pose(start_pose, which_arm)
-            rospy.logdebug('Done moving to overhead start point')
-            start_pose.pose.position.z = self.lower_arm_init_z
-            self.move_to_cart_pose(start_pose, which_arm)
-            rospy.loginfo('Done moving to lower start point')
-
-            # Lower arm to table
-            start_pose.pose.position.z = start_point.z
-            # self.move_down_until_contact(which_arm)
-
-        self.move_to_cart_pose(start_pose, which_arm, self.pre_push_count_thresh)
-        rospy.loginfo('Done moving to start point')
-
-        return response
-
-    def overhead_pre_push(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_PULL_READY_JOINTS
-            which_arm = 'l'
-            wrist_pitch = 0.5*pi
-            robot_gripper = self.robot.left_gripper
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_PULL_READY_JOINTS
-            which_arm = 'r'
-            wrist_pitch = -0.5*pi
-            robot_gripper = self.robot.right_gripper
-        start_pose = PoseStamped()
-        start_pose.header = request.start_point.header
-        start_pose.pose.position.x = start_point.x
-        start_pose.pose.position.y = start_point.y
-        start_pose.pose.position.z = start_point.z
-        q = tf.transformations.quaternion_from_euler(0.0, fabs(wrist_pitch),
-                                                     wrist_yaw)
-        start_pose.pose.orientation.x = q[0]
-        start_pose.pose.orientation.y = q[1]
-        start_pose.pose.orientation.z = q[2]
-        start_pose.pose.orientation.w = q[3]
-
-
-        rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
-        self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
-
-        if not request.high_arm_init:
-            # Rotate wrist before moving to position
-            rospy.logdebug('Rotating elbow for overhead push')
-            arm_pose = self.get_arm_joint_pose(which_arm)
-            arm_pose[-3] =  wrist_pitch
-            self.set_arm_joint_pose(arm_pose, which_arm, nsecs=1.0)
-
-        if request.open_gripper:
-            res = robot_gripper.open(block=True, position=0.05)
-
-        if request.high_arm_init:
-            # Move to offset pose above the table
-            start_pose.pose.position.z = self.high_arm_init_z
-            self.move_to_cart_pose(start_pose, which_arm, self.pre_push_count_thresh)
-            rospy.logdebug('Done moving to overhead start point')
-            start_pose.pose.position.z = self.lower_arm_init_z
-            self.move_to_cart_pose(start_pose, which_arm, self.pre_push_count_thresh)
-            rospy.loginfo('Done moving to lower start point')
-
-            # Lower arm to table
-            start_pose.pose.position.z = start_point.z
-            # self.move_down_until_contact(which_arm)
-
-        # Move to start pose
-        if not self.move_to_cart_pose_ik(start_pose, which_arm):
-            rospy.logwarn('IK Failed, not at desired initial pose')
-            response.failed_pre_position = True
-            # self.move_to_cart_pose(start_pose, which_arm, self.pre_push_count_thresh)
-        else:
-            response.failed_pre_position = False
-            rospy.loginfo('Done moving to start point')
 
         return response
 
@@ -1815,163 +1218,6 @@ class InitializePositionControllerNode:
         self.reset_arm_pose(True, which_arm, request.high_arm_init)
         return response
 
-    def gripper_sweep(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-        push_dist = request.desired_push_dist
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            which_arm = 'l'
-            wrist_roll = -pi
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            which_arm = 'r'
-            wrist_roll = 0.0
-
-        # NOTE: because of the wrist roll orientation, +Z at the gripper
-        # equates to negative Y in the torso_lift_link at 0.0 yaw
-        # So we flip the push_dist to make things look like one would expect
-        rospy.loginfo('Sweeping gripper in ' + str(push_dist) + 'm')
-        # pose_err, err_dist = self.move_relative_gripper(
-        #     np.matrix([0.0, 0.0, -push_dist]).T, which_arm)
-        if wrist_yaw > -pi*0.5:
-            push_angle = wrist_yaw + pi*0.5
-        else:
-            push_angle = wrist_yaw - pi*0.5
-        # pose_err, err_dist = self.move_relative_torso(
-        #     np.matrix([cos(push_angle)*push_dist,
-        #                sin(push_angle)*push_dist, 0.0]).T, which_arm)
-        pose_err, err_dist = self.move_relative_torso_epc(push_angle, push_dist,
-                                                          which_arm)
-
-        rospy.logdebug('Done sweeping in')
-
-        # response.dist_pushed = push_dist - err_dist
-        return response
-
-    def gripper_post_sweep(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-        push_dist = request.desired_push_dist
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            which_arm = 'l'
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            which_arm = 'r'
-
-        rospy.logdebug('Moving gripper up')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, self.gripper_raise_dist, 0.0]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.logdebug('Sweeping gripper outward')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, 0.0, push_dist]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.loginfo('Done sweeping outward')
-
-        if request.high_arm_init:
-            rospy.logdebug('Moving up to end point')
-            wrist_yaw = request.wrist_yaw
-            end_pose = PoseStamped()
-            end_pose.header = request.start_point.header
-            end_pose.pose.position.x = start_point.x
-            end_pose.pose.position.y = start_point.y
-            end_pose.pose.position.z = self.high_arm_init_z
-            q = tf.transformations.quaternion_from_euler(0.5*pi, 0.0, wrist_yaw)
-            end_pose.pose.orientation.x = q[0]
-            end_pose.pose.orientation.y = q[1]
-            end_pose.pose.orientation.z = q[2]
-            end_pose.pose.orientation.w = q[3]
-            self.move_to_cart_pose(end_pose, which_arm,
-                                   self.post_move_count_thresh)
-            rospy.loginfo('Done moving up to end point')
-
-        self.reset_arm_pose(True, which_arm, request.high_arm_init)
-        return response
-
-    def overhead_push(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-        push_dist = request.desired_push_dist
-
-        if request.left_arm:
-            which_arm = 'l'
-            wrist_pitch = 0.5*pi
-        else:
-            which_arm = 'r'
-            wrist_pitch = -0.5*pi
-
-        rospy.loginfo('Pushing forward ' + str(push_dist) + 'm')
-        # pose_err, err_dist = self.move_relative_gripper(
-        #     np.matrix([0.0, 0.0, push_dist]).T, which_arm)
-        # pose_err, err_dist = self.move_relative_torso(
-        #     np.matrix([cos(wrist_yaw)*push_dist,
-        #                sin(wrist_yaw)*push_dist, 0.0]).T, which_arm)
-        pose_err, err_dist = self.move_relative_torso_epc(wrist_yaw, push_dist,
-                                                          which_arm)
-
-        rospy.logdebug('Done pushing forward')
-
-        # TODO: Add this back in
-        response.dist_pushed = push_dist - err_dist
-        return response
-
-    def overhead_post_push(self, request):
-        response = FeedbackPushResponse()
-        start_point = request.start_point.point
-        wrist_yaw = request.wrist_yaw
-        push_dist = request.desired_push_dist
-
-        if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_PULL_READY_JOINTS
-            which_arm = 'l'
-            wrist_pitch = 0.5*pi
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_PULL_READY_JOINTS
-            which_arm = 'r'
-            wrist_pitch = -0.5*pi
-
-        rospy.logdebug('Moving gripper up')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([-self.gripper_raise_dist, 0.0, 0.0]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.logdebug('Done moving up')
-        rospy.logdebug('Pushing reverse')
-        pose_err, err_dist = self.move_relative_gripper(
-            np.matrix([0.0, 0.0, -push_dist]).T, which_arm,
-            move_cart_count_thresh=self.post_move_count_thresh)
-        rospy.loginfo('Done pushing reverse')
-
-        if request.high_arm_init:
-            rospy.logdebug('Moving up to end point')
-            wrist_yaw = request.wrist_yaw
-            end_pose = PoseStamped()
-            end_pose.header = request.start_point.header
-            end_pose.pose.position.x = start_point.x
-            end_pose.pose.position.y = start_point.y
-            end_pose.pose.position.z = self.high_arm_init_z
-            q = tf.transformations.quaternion_from_euler(0.0, 0.5*pi, wrist_yaw)
-            end_pose.pose.orientation.x = q[0]
-            end_pose.pose.orientation.y = q[1]
-            end_pose.pose.orientation.z = q[2]
-            end_pose.pose.orientation.w = q[3]
-            self.move_to_cart_pose(end_pose, which_arm,
-                                   self.post_move_count_thresh)
-            rospy.loginfo('Done moving up to end point')
-
-        self.reset_arm_pose(True, which_arm, request.high_arm_init)
-        return response
-
     #
     # Head and spine setup functions
     #
@@ -2018,8 +1264,8 @@ class InitializePositionControllerNode:
         torso_min = 0.0
 
         current_torso_position = self.robot.states[self.robot.ZLIFT]['joint_angles']
-	transform_offset = lift_link_z - current_torso_position
-	torso_goal_position = transform_offset + self.torso_z_offset - table_z
+        transform_offset = lift_link_z - current_torso_position
+        torso_goal_position = transform_offset + self.torso_z_offset - table_z
         #torso_goal_position = current_torso_position + lift_link_delta_z
         torso_goal_position = (max(min(torso_max, torso_goal_position),
                                    torso_min))
@@ -2648,6 +1894,7 @@ class InitializePositionControllerNode:
         self.robot.updateSendCmd(self.robot.LEFT_ARM)
         self.robot.updateSendCmd(self.robot.RIGHT_ARM)
         '''
+        '''
         if _USE_LEARN_IO:
             if self.learn_io is not None:
                 self.learn_io.close_out_file()
@@ -2657,6 +1904,7 @@ class InitializePositionControllerNode:
             if self.target_trajectory_io is not None:
                 self.target_trajectory_io.close_out_file()
         # TODO: stop moving the arms on shutdown
+        '''
 
     #
     # Main Control Loop
