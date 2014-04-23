@@ -119,10 +119,10 @@
 //#define DISPLAY_INPUT_COLOR 1
 //#define DISPLAY_WAIT 1
 // #define PROFILE_CB_TIME 1
-#define DEBUG_POSE_ESTIMATION 1
-#define VISUALIZE_CONTACT_PT 1
-#define BUFFER_AND_WRITE 1
-#define FORCE_BEFORE_AND_AFTER_VIZ 1
+//#define DEBUG_POSE_ESTIMATION 1
+//#define VISUALIZE_CONTACT_PT 1
+//#define BUFFER_AND_WRITE 1
+//#define FORCE_BEFORE_AND_AFTER_VIZ 1
 #define DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY 1
 // #define GET_SHAPE_DESCRIPTORS_EVERY_FRAME 1
 
@@ -582,8 +582,6 @@ class TabletopPushingPerceptionNode
       obj_tracker_->updateTracks(cur_color_frame_, cur_self_mask_, cur_self_filtered_cloud_, proxy_name_,
                                  tracker_state);
 
-      // Publish object cloud
-      obj_pcl_pub.publish(tracker_state.obj_cloud);
 
 #ifdef DEBUG_POSE_ESTIMATION
       pose_est_stream_ << tracker_state.x.x << " " << tracker_state.x.y << " " << tracker_state.z << " "
@@ -637,11 +635,6 @@ class TabletopPushingPerceptionNode
         long long write_dyn_start_time = Timer::nanoTime();
 #endif
         ProtoObject cur_obj = obj_tracker_->getMostRecentObject();
-
-        // Publish object cloud
-        sensor_msgs::PointCloud2 obj_cloud_msg;
-        pcl::toROSMsg(cur_obj.cloud, obj_cloud_msg);
-        obj_pcl_pub.publish(obj_cloud_msg);
 
         if (write_dyn_to_disk_)
         {
@@ -723,7 +716,6 @@ class TabletopPushingPerceptionNode
       PointStamped start_point;
       PointStamped end_point;
       PushTrackerState tracker_state = obj_tracker_->getMostRecentState();
-      obj_pcl_pub.publish(tracker_state.obj_cloud);
       start_point.header.frame_id = workspace_frame_;
       end_point.header.frame_id = workspace_frame_;
       start_point.point.x = tracker_state.x.x;
@@ -954,11 +946,6 @@ class TabletopPushingPerceptionNode
         recording_input_ = false;
         ProtoObject cur_obj = obj_tracker_->getMostRecentObject();
       
-        // Publish the object cloud only
-        sensor_msgs::PointCloud2 obj_cloud_msg;
-        pcl::toROSMsg(cur_obj.cloud, obj_cloud_msg);
-        obj_pcl_pub.publish(obj_cloud_msg);
-
         if (cur_obj.cloud.header.frame_id.size() == 0)
         {
           ROS_INFO_STREAM("cur_obj.cloud.header.frame_id is blank, setting to workspace_frame_");
@@ -969,7 +956,6 @@ class TabletopPushingPerceptionNode
         cur_state.x.y = res.centroid.y;
         cur_state.x.theta = res.theta;
         cur_state.z = res.centroid.z;
-        cur_state.obj_cloud = obj_cloud_msg;
         if (req.analyze_previous)
         {
           // Display different color to signal swap available

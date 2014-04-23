@@ -68,7 +68,7 @@
 #include <tabletop_pushing/extern/Timer.hpp>
 
 // Debugging IFDEFS
-#define DISPLAY_CLOUD_DIFF 1
+//#define DISPLAY_CLOUD_DIFF 1
 // #define PROFILE_OBJECT_SEGMENTATION_TIME 1
 // #define PROFILE_TABLE_SEGMENTATION_TIME 1
 // #define PROFILE_OBJECT_CLUSTER_TIME 1

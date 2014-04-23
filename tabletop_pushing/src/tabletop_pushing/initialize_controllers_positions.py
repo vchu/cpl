@@ -378,6 +378,9 @@ class InitializePositionControllerNode:
         self.gripper_simple_push_srv = rospy.Service(
             'gripper_simple_push', FeedbackPush, self.simple_push)
 
+        self.gripper_feedback_post_push_srv = rospy.Service(
+            'gripper_feedback_post_push', FeedbackPush,
+            self.gripper_feedback_post_push)
         '''
         # currently not implemented
         self.gripper_feedback_push_srv = rospy.Service(
@@ -526,10 +529,10 @@ class InitializePositionControllerNode:
 
         # Move to goal pose
         self.move_to_cart_pose(goal_pose, which_arm)
-        response.failed_position = False
+        #response.failed_position = False
 
         rospy.loginfo('Done moving to goal point')
-        self.use_gripper_place_joint_posture = False
+        #self.use_gripper_place_joint_posture = False
 
         return response
 
@@ -1052,67 +1055,29 @@ class InitializePositionControllerNode:
         is_pull = request.behavior_primitive == GRIPPER_PULL
 
         if request.left_arm:
-            ready_joints = LEFT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = LEFT_ARM_PULL_READY_JOINTS
-            which_arm = 'l'
-            robot_gripper = self.robot.left_gripper
-        else:
-            ready_joints = RIGHT_ARM_READY_JOINTS
-            if request.high_arm_init:
-                ready_joints = RIGHT_ARM_PULL_READY_JOINTS
-            which_arm = 'r'
-            robot_gripper = self.robot.right_gripper
+            (pos, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
+                                                                'handmount_LEFT',
+                                                                rospy.Time(0))
 
-        if is_pull:
-            self.stop_moving_vel(which_arm)
-            rospy.loginfo('Opening gripper')
-            res = robot_gripper.open(position=0.9,block=True)
-            rospy.loginfo('Done opening gripper')
-            rospy.logdebug('Pulling reverse')
-            pose_err, err_dist = self.move_relative_gripper(
-                np.matrix([-self.gripper_pull_reverse_dist, 0.0, 0.0]).T, which_arm,
-                move_cart_count_thresh=self.post_pull_count_thresh)
-            rospy.loginfo('Done pulling reverse')
+            which_arm = 'l'
         else:
-            rospy.logdebug('Moving gripper up')
-            pose_err, err_dist = self.move_relative_gripper(
-                np.matrix([0.0, 0.0, -self.gripper_raise_dist]).T, which_arm,
-                move_cart_count_thresh=self.post_move_count_thresh)
-            rospy.logdebug('Done moving up')
-            rospy.logdebug('Pushing reverse')
-            pose_err, err_dist = self.move_relative_gripper(
-                np.matrix([-self.gripper_push_reverse_dist, 0.0, 0.0]).T, which_arm,
-                move_cart_count_thresh=self.post_move_count_thresh)
-            rospy.loginfo('Done pushing reverse')
+            (pos, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
+                                                                'handmount_RIGHT',
+                                                                rospy.Time(0))
+            which_arm = 'r'
 
         rospy.logdebug('Moving up to end point')
         wrist_yaw = request.wrist_yaw
         end_pose = PoseStamped()
         end_pose.header = request.start_point.header
 
-        # Move straight up to point above the current EE pose
-        if request.left_arm:
-            cur_pose = self.l_arm_pose
-        else:
-            cur_pose = self.r_arm_pose
+        end_pose.pose.position.x = pos[0]
+        end_pose.pose.position.y = pos[1]
+        end_pose.pose.position.z = pos[2] + 0.1 # Just move the arm up
 
-        end_pose.pose.position.x = cur_pose.pose.position.x
-        end_pose.pose.position.y = cur_pose.pose.position.y
-        end_pose.pose.position.z = self.high_arm_init_z
-        q = tf.transformations.quaternion_from_euler(0.0, 0.0, wrist_yaw)
-        end_pose.pose.orientation.x = q[0]
-        end_pose.pose.orientation.y = q[1]
-        end_pose.pose.orientation.z = q[2]
-        end_pose.pose.orientation.w = q[3]
-        self.move_to_cart_pose(end_pose, which_arm,
-                               self.post_move_count_thresh)
+        self.move_to_cart_pose(end_pose, which_arm)
+
         rospy.loginfo('Done moving up to end point')
-
-        if request.open_gripper or is_pull:
-            rospy.loginfo('Closing gripper')
-            res = robot_gripper.close(block=True, effort=self.max_close_effort)
-            rospy.loginfo('Done closing gripper')
 
         self.reset_arm_pose(True, which_arm, request.high_arm_init)
         return response
@@ -1341,6 +1306,14 @@ class InitializePositionControllerNode:
         #                                   request.camera_frame)
         head_res = True
         response = RaiseAndLookResponse()
+
+        # Store off the current gripper positions
+        (self.l_arm_start_pos, self.l_arm_start_rot) = self.tf_listener.lookupTransform(self.base_frame_name,
+                                                                'handmount_LEFT',
+                                                                rospy.Time(0))
+        (self.r_arm_start_pos, self.r_arm_start_rot) = self.tf_listener.lookupTransform(self.base_frame_name,
+                                                                'handmount_RIGHT',
+                                                                rospy.Time(0))
         if head_res:
             rospy.loginfo('Succeeded in pointing head')
             response.head_succeeded = True

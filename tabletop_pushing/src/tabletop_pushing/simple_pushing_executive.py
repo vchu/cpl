@@ -46,6 +46,7 @@ from select import select
 from push_learning import PushLearningIO
 from geometry_msgs.msg import Pose2D
 from geometry_msgs.msg import Pose
+from std_srvs.srv import Empty
 import time
 import random
 import math
@@ -135,6 +136,11 @@ class TabletopExecutive:
             self.gripper_simple_push_proxy = rospy.ServiceProxy(
                 'gripper_simple_push', FeedbackPush)
 
+            # Add service call to gazebo to reset workd
+            self.gazebo_reset_world = rospy.ServiceProxy(
+                'gazebo/reset_world', Empty)
+
+
         self.table_proxy = rospy.ServiceProxy('get_table_location', LocateTable)
         self.learn_io = None
 
@@ -176,7 +182,7 @@ class TabletopExecutive:
             rospy.loginfo('Opening learn file: '+learn_file_name)
             self.learn_io.open_out_file(learn_file_name)
 
-    def init_object_poses(self, a=18, r=0.2, zs=1):
+    def init_object_poses(self, a=18, r=0.05, zs=1):
 
         # create dictionary for poses
         self.poses = dict()
@@ -840,6 +846,8 @@ if __name__ == '__main__':
                 node.run_num = i+1
                 previous_id = code_in
                 rospy.loginfo('Running push exploration round ' + str(i) + ' for object ' + previous_id)
+                # Clear gazebo
+                node.gazebo_reset_world()
                 clean_exploration = node.run_push_exploration(object_id=code_in)
                 if not clean_exploration:
                     rospy.loginfo('Not clean end to pushing stuff')
