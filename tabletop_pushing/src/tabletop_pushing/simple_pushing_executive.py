@@ -47,6 +47,9 @@ from push_learning import PushLearningIO
 from geometry_msgs.msg import Pose2D
 from geometry_msgs.msg import Pose
 from std_srvs.srv import Empty
+from std_msgs.msg import Bool
+from std_msgs.msg import Int8
+from std_msgs.msg import String
 import time
 import random
 import math
@@ -77,7 +80,7 @@ class TabletopExecutive:
         self.use_same_side_y_thresh = rospy.get_param('~use_same_side_y_thresh', 0.3)
         self.use_same_side_x_thresh = rospy.get_param('~use_same_side_x_thresh', 0.8)
 
-        self.gripper_offset_dist = rospy.get_param('~gripper_push_offset_dist', 0.05)
+        self.gripper_offset_dist = rospy.get_param('~gripper_push_offset_dist', 0.07)
         self.gripper_start_z = rospy.get_param('~gripper_push_start_z', -0.29)
 
         self.pincher_offset_dist = rospy.get_param('~pincher_push_offset_dist', 0.05)
@@ -140,6 +143,12 @@ class TabletopExecutive:
             self.gazebo_reset_world = rospy.ServiceProxy(
                 'gazebo/reset_world', Empty)
 
+        # Setup logging
+        self.data_logger = rospy.Publisher('push_data_logger_flag', Bool)
+        self.push_vector_pub = rospy.Publisher('push_vector', PushVector)
+        self.object_info_pub = rospy.Publisher('object_information', Pose2D)
+        self.run_num_pub = rospy.Publisher('run_number', Int8)
+        self.object_id_pub = rospy.Publisher('object_id', String)
 
         self.table_proxy = rospy.ServiceProxy('get_table_location', LocateTable)
         self.learn_io = None
@@ -186,6 +195,7 @@ class TabletopExecutive:
 
         # create dictionary for poses
         self.poses = dict()
+        self.zs = zs
         
         # Convert a to rad
         rad_a = a* (math.pi/180)
@@ -246,7 +256,9 @@ class TabletopExecutive:
         if self.servo_head_during_pushing:
             self.raise_and_look(point_head_only=True)
 
-        init_pose = self.get_feedback_push_initial_obj_pose()
+        #init_pose = self.get_feedback_push_initial_obj_pose()
+        init_pose, push_vec_obj = self.get_feedback_push_initial_obj_pose()
+
         while not _OFFLINE and self.out_of_workspace(init_pose):
             rospy.loginfo('Object out of workspace at pose: (' + str(init_pose.x) + ', ' +
                           str(init_pose.y) + ')')
@@ -285,10 +297,14 @@ class TabletopExecutive:
             else:
                 which_arm = input_arm
 
+            # Publish the push vector
+            push_vector_returned = push_vec_res.push
+            self.push_vector_pub.publish(push_vector_returned)
 
             res, push_res = self.perform_push(which_arm, behavior_primitive,
                                               push_vec_res, goal_pose,
-                                              controller_name, proxy_name)
+                                              controller_name, proxy_name, 
+                                              push_vec_res_obj=push_vec_obj)
             push_time = time.time() - start_time
             if self.check_model_performance:
                 rospy.loginfo('Most predictive model: ' + push_res.best_model + ' with score ' +
@@ -341,7 +357,7 @@ class TabletopExecutive:
                 if quit_code(code_in):
                     return 'quit'
             else:
-                return push_vec_res.centroid
+                return push_vec_res.centroid, push_vec_res
 
 
     def get_feedback_push_start_pose(self, goal_pose, controller_name, proxy_name,
@@ -397,7 +413,7 @@ class TabletopExecutive:
         return which_arm
 
     def perform_push(self, which_arm, behavior_primitive, push_vector_res, goal_pose,
-                     controller_name, proxy_name, high_init = True):
+                     controller_name, proxy_name, high_init = True, push_vec_res_obj = None):
         push_angle = push_vector_res.push.push_angle
         # NOTE: Use commanded push distance not visually decided minimal distance
         if push_vector_res is None:
@@ -428,7 +444,8 @@ class TabletopExecutive:
         elif (behavior_primitive == SIMPLE_PUSH):
             result = self.gripper_simple_push_object(which_arm,
                                                        push_vector_res, goal_pose,
-                                                       controller_name, proxy_name, behavior_primitive)
+                                                       controller_name, proxy_name, behavior_primitive,
+                                                       push_vec_res_obj=push_vec_res_obj)
             
         else:
             rospy.logwarn('Unknown behavior_primitive: ' + str(behavior_primitive))
@@ -564,12 +581,14 @@ class TabletopExecutive:
             raise_req.have_table_centroid = False
 
         rospy.loginfo("Adjusting spine height");
+        
         raise_req.point_head_only = False
         raise_req.init_arms = init_arms
         raise_res = self.raise_and_look_proxy(raise_req)
     
     def gripper_simple_push_object(self, which_arm, learn_push_res, goal_pose, controller_name,
-                                     proxy_name, behavior_primitive, high_init=True, open_gripper=False):
+                                     proxy_name, behavior_primitive, high_init=True, open_gripper=False,
+                                     push_vec_res_obj=None):
         # Convert pose response to correct push request format
         push_req = FeedbackPushRequest()
         push_vector = learn_push_res.push
@@ -598,6 +617,24 @@ class TabletopExecutive:
         else:
             offset_dist = self.gripper_offset_dist
             start_z = self.gripper_start_z
+
+        # Publish info about the object
+        self.object_info_pub.publish(push_vec_res_obj.size) 
+
+        # Create z_offset for the gripper
+        z_offset = 0.07 # Experimentally obtained in simulation
+
+        obj_height = push_vec_res_obj.size.y # height of object
+        explore_height = obj_height/self.zs # how much to increment in Z
+
+        rospy.loginfo("Getting table pose")
+        table_req = LocateTableRequest()
+        table_req.recalculate = False
+        table_res = self.table_proxy(table_req);
+        
+        # Init the Z to go from the table height to the max height of object
+        table_height = table_res.table_centroid.pose.position.z 
+        start_z = table_height + explore_height*self.poses[self.run_num][2] + z_offset
 
         rospy.loginfo('Gripper push pre-augmented start_point: (' +
                       str(push_req.start_point.point.x) + ', ' +
@@ -812,7 +849,7 @@ if __name__ == '__main__':
     learning_dynamics = True
     compare_shape_for_dynamics = False
     check_model_performance = False
-    num_trials_per_object = 5
+    num_trials_per_object = 10 
     # Used for training data collection:
     # num_start_loc_sample_locs = 32
     # Used for testing data collection:
@@ -848,7 +885,16 @@ if __name__ == '__main__':
                 rospy.loginfo('Running push exploration round ' + str(i) + ' for object ' + previous_id)
                 # Clear gazebo
                 node.gazebo_reset_world()
+
+                # Start recording after we reset world
+                node.data_logger.publish(Bool(True))
+                node.object_id_pub.publish(String(code_in))
+                node.run_num_pub.publish(Int8(node.run_num))
+
                 clean_exploration = node.run_push_exploration(object_id=code_in)
+
+                # Stop recording data
+                node.data_logger.publish(Bool(False))
                 if not clean_exploration:
                     rospy.loginfo('Not clean end to pushing stuff')
                     running = False

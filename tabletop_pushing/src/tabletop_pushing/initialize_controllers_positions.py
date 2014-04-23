@@ -356,6 +356,8 @@ class InitializePositionControllerNode:
         # Global counters
         self.goal_cb_count = 0
 
+        self.z_resolution = 0.05
+
         '''
         # Setup callbacks to keep track of controller state
         rospy.Subscriber('/l'+self.base_cart_controller_name+'/state', self.controller_state_msg,
@@ -368,6 +370,7 @@ class InitializePositionControllerNode:
         rospy.Subscriber('/r'+self.base_vel_controller_name+'/state', self.vel_controller_state_msg,
                          self.r_arm_vel_state_callback)
         '''
+
         # Setup service calls
         self.raise_and_look_serice = rospy.Service(
             'raise_and_look', RaiseAndLook, self.raise_and_look)
@@ -381,15 +384,6 @@ class InitializePositionControllerNode:
         self.gripper_feedback_post_push_srv = rospy.Service(
             'gripper_feedback_post_push', FeedbackPush,
             self.gripper_feedback_post_push)
-        '''
-        # currently not implemented
-        self.gripper_feedback_push_srv = rospy.Service(
-            'gripper_feedback_push', FeedbackPush, self.gripper_feedback_push)
-
-        self.gripper_feedback_post_push_srv = rospy.Service(
-            'gripper_feedback_post_push', FeedbackPush,
-            self.gripper_feedback_post_push)
-        '''
 
     #
     # Initialization functions
@@ -509,7 +503,8 @@ class InitializePositionControllerNode:
         goal_pose.pose.position.x = goal_point.x + new_trans[0]
         goal_pose.pose.position.y = goal_point.y + new_trans[1]
         #goal_pose.pose.position.z = goal_point.z + new_trans[2] + 0.1
-        goal_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+        # Check which "height" we're doing
+        goal_pose.pose.position.z = start_point.z + new_trans[2]
 
         wrist_pitch = 0.0625*pi
         q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
@@ -528,7 +523,7 @@ class InitializePositionControllerNode:
         '''
 
         # Move to goal pose
-        self.move_to_cart_pose(goal_pose, which_arm)
+        self.move_to_cart_pose(goal_pose, which_arm, post=True)
         #response.failed_position = False
 
         rospy.loginfo('Done moving to goal point')
@@ -1112,7 +1107,7 @@ class InitializePositionControllerNode:
         start_pose.header = request.start_point.header
         start_pose.pose.position.x = start_point.x + new_trans[0]
         start_pose.pose.position.y = start_point.y + new_trans[1]
-        start_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+        start_pose.pose.position.z = start_point.z + new_trans[2]
         #start_pose.pose.position.z = start_point.z + new_trans[2] + 0.08
 
         wrist_pitch = 0.0625*pi
@@ -1343,7 +1338,7 @@ class InitializePositionControllerNode:
             self.robot.updateSendCmd(self.robot.RIGHT_ARM)
 
     def move_to_cart_pose(self, pose, which_arm,
-                          done_moving_count_thresh=None, pressure=1000):
+                          done_moving_count_thresh=None, pressure=1000, post=False):
 
         if done_moving_count_thresh is None:
             done_moving_count_thresh = self.arm_done_moving_count_thresh
@@ -1353,13 +1348,11 @@ class InitializePositionControllerNode:
         # Currently no switching...
         #self.switch_to_cart_controllers()  
         if which_arm == 'l':
-            #print self.robot.computeIK(pose, self.robot.LEFT_ARM)
-            self.robot.computeIK_moveit(pose, self.robot.LEFT_ARM)
+            self.robot.computeIK_moveit(pose, self.robot.LEFT_ARM, post)
             #pl = self.l_pressure_listener
 
         else:
-            self.robot.computeIK_moveit(pose, self.robot.RIGHT_ARM)
-            #print self.robot.computeIK(pose, self.robot.RIGHT_ARM)
+            self.robot.computeIK_moveit(pose, self.robot.RIGHT_ARM, post)
             #pl = self.r_pressure_listener
 
         arm_not_moving_count = 0

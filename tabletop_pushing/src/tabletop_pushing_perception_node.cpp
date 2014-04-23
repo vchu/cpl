@@ -2099,6 +2099,11 @@ class TabletopPushingPerceptionNode
     res.centroid.y = cur_obj.centroid[1];
     res.centroid.z = cur_obj.centroid[2];
     res.theta = obj_tracker_->getThetaFromEllipse(obj_ellipse);
+    ROS_INFO_STREAM("Object height is: " << obj_ellipse.size.height);
+    res.size.x = obj_ellipse.size.width;
+    res.size.y = obj_ellipse.size.height;
+    res.size.theta = obj_ellipse.angle;
+
     if(obj_tracker_->getSwapState())
     {
       if(res.theta > 0.0)

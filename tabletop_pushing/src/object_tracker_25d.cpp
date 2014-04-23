@@ -901,12 +901,15 @@ void ObjectTracker25D::fitHullEllipse(XYZPointCloud& hull_cloud, cv::RotatedRect
   Eigen::Vector3f eigen_values;
   Eigen::Matrix3f eigen_vectors;
   Eigen::Vector4f centroid;
+  Eigen::Vector4f min;
+  Eigen::Vector4f max;
 
   // HACK: Copied/adapted from PCA in PCL because PCL was seg faulting after an update on the robot
   // Compute mean
   centroid = Eigen::Vector4f::Zero();
   // ROS_INFO_STREAM("Getting centroid");
   pcl::compute3DCentroid(hull_cloud, centroid);
+  //pcl::computeMinMax3D(hull_cloud, min, max);
   // Compute demeanished cloud
   Eigen::MatrixXf cloud_demean;
   // ROS_INFO_STREAM("Demenaing point cloud");

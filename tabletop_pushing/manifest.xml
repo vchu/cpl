@@ -36,6 +36,7 @@
   <!--depend package="test_moveit_curi"/-->
   <depend package="hrl_dynamic_mpc"/>
   <depend package="m3ctrl_msgs"/>
+  <depend package="gazebo_msgs"/>
 
   <export>
     <cpp cflags="-I${prefix}/include" lflags="-Wl,-rpath,${prefix}/lib -L${prefix}/lib -lpoint_cloud_segmentation -lshape_features" />

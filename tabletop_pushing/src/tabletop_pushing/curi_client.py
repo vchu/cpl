@@ -40,8 +40,7 @@ import rospy
 import sys, time, os
 import math, numpy as np
 import time
-from geometry_msgs.msg import Wrench
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Wrench, Twist, Vector3
 from m3ctrl_msgs.msg import M3JointCmd
 from sensor_msgs.msg import JointState
 import threading
@@ -54,7 +53,7 @@ import curi_arm_kinematics as dak
 from moveit_commander import RobotCommander, MoveGroupCommander, PlanningSceneInterface
 import moveit_msgs.msg
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from moveit_msgs.msg import RobotTrajectory
+from moveit_msgs.msg import RobotTrajectory, PositionConstraint, Constraints
 
 ##
 #Class DarciClient()
@@ -262,7 +261,7 @@ class DarciClient():
 
         return self.states[body_part]['kinematics'].IK(pos, rot) 
 
-    def computeIK_moveit(self, poseMsg, body_part):
+    def computeIK_moveit(self, poseMsg, body_part, post=False):
         
         # Uses move arm to do the planning
         scene = PlanningSceneInterface()
@@ -276,10 +275,44 @@ class DarciClient():
             rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
             return None
 
+        import pdb; pdb.set_trace()
+
         # Set just the position of the target currently
         # TODO: Fix the orientation
         group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
 
+        #if post:
+        if False:
+            limit_wrist = Constraints()
+            limit_wrist.name = "limit wrist"
+            wrist_constraint = PositionConstraint()
+            wrist_constraint.header = poseMsg.header
+            wrist_constraint.link_name = group.get_end_effector_link()
+            pos_constr = Vector3()
+            pos_constr.x = 0.2
+            pos_constr.y = 0.2
+            pos_constr.z = 0.01
+            wrist_constraint.target_point_offset = pos_constr
+            wrist_constraint.weight = 1.0
+            limit_wrist.position_constraints.append(wrist_constraint)
+            group.set_path_constraints(limit_wrist)
+        
+        #group.set_pose_target(poseMsg.pose)
+        # Add constraint to not allow the orientation to change?
+        '''
+        limit_wrist = Constraints()
+        limit_wrist.name = "limit wrist"
+        wrist_orientation_constraint = OrientationConstraint()
+        wrist_orientation_constraint.header = poseMsg.header
+        wrist_orientation_constraint.link_name = group.get_end_effector_link()
+        wrist_orientation_constraint.orientation = poseMsg.pose.orientation # setting goal orientation
+        wrist_orientation_constraint.absolute_x_axis_tolerance = 0.08 # ignore errors in the x-axis
+        wrist_orientation_constraint.absolute_y_axis_tolerance = 0.08 # ignore errors in the y-axis
+        wrist_orientation_constraint.absolute_z_axis_tolerance = 3.14 # enforce z-axis orientation
+        wrist_orientation_constraint.weight = 1.0
+        limit_wrist.orientation_constraints.append(wrist_orientation_constraint)
+        group.set_path_constraints(limit_wrist)
+        '''
         # Remove collision object?
         # collision_object = moveit_msgs.msg.
     
