@@ -93,6 +93,9 @@ class ObjectTracker25D
                    float feature_point_ratio_test_thresh=0.75,
                    double segment_search_radius = 0.3,
                    double feature_point_ransac_inlier_percent_thresh = 0.85);
+  
+  XYZPointCloud findTableMask(cv::Mat& in_frame, XYZPointCloud& cloud,
+                                 cv::Mat self_mask, bool& no_objects, bool init=false);
 
   ProtoObject findTargetObject(cv::Mat& in_frame, pcl::PointCloud<pcl::PointXYZ>& cloud,
                                bool& no_objects, bool init=false);

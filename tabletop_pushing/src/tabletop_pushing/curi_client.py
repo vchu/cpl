@@ -280,6 +280,9 @@ class DarciClient():
         # TODO: Fix the orientation
         group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
 
+        # Remove collision object?
+        # collision_object = moveit_msgs.msg.
+    
         # Init vars
         plan = RobotTrajectory()
         count = 1

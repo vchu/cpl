@@ -116,14 +116,14 @@
 #include <cstdlib> // for MAX_RAND
 
 // Debugging IFDEFS
-// #define DISPLAY_INPUT_COLOR 1
-#define DISPLAY_WAIT 1
+//#define DISPLAY_INPUT_COLOR 1
+//#define DISPLAY_WAIT 1
 // #define PROFILE_CB_TIME 1
 #define DEBUG_POSE_ESTIMATION 1
 #define VISUALIZE_CONTACT_PT 1
 #define BUFFER_AND_WRITE 1
 #define FORCE_BEFORE_AND_AFTER_VIZ 1
- #define DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY 1
+#define DISPLAY_SHAPE_DESCRIPTOR_BOUNDARY 1
 // #define GET_SHAPE_DESCRIPTORS_EVERY_FRAME 1
 
 using boost::shared_ptr;
@@ -221,6 +221,8 @@ class TabletopPushingPerceptionNode
   {
     // Setup extra publishers
     fpcl_pub = n_.advertise<sensor_msgs::PointCloud2>("/asus_filtered",1);
+    obj_pcl_pub = n_.advertise<sensor_msgs::PointCloud2>("/obj_only_points",1);
+    fobj_pcl_pub = n_.advertise<sensor_msgs::PointCloud2>("/obj_filtered",1);
     tf_ = shared_ptr<tf::TransformListener>(new tf::TransformListener());
     pcl_segmenter_ = shared_ptr<PointCloudSegmentation>(
         new PointCloudSegmentation(tf_));
@@ -502,6 +504,29 @@ class TabletopPushingPerceptionNode
     pcl::toROSMsg(cur_self_filtered_cloud_, testing_cloud_msg); 
     fpcl_pub.publish(testing_cloud_msg);
 
+    bool no_objects = false;
+    /*
+    cv::Mat tableMask = obj_tracker_->findTableMask(cur_color_frame_, cur_point_cloud_, self_mask, no_objects, true);
+
+    pcl::copyPointCloud(cur_self_filtered_cloud_, cur_object_filtered_cloud_);
+    for (unsigned int r = 0; r < tableMask.rows; ++r)
+    {
+      for (unsigned int c = 0; c < tableMask.cols; ++c)
+      {
+        if (tableMask.at<uchar>(r, c) == 0)
+        {
+          cur_object_filtered_cloud_.at(c, r) = nan_point_;
+        }
+      }
+    }*/
+
+    XYZPointCloud tableMask = obj_tracker_->findTableMask(cur_color_frame_, cur_point_cloud_, self_mask, no_objects, true);
+
+    // Publish just the table
+    sensor_msgs::PointCloud2 obj_filtered_cloud_msg;
+    pcl::toROSMsg(tableMask, obj_filtered_cloud_msg);
+    fobj_pcl_pub.publish(obj_filtered_cloud_msg);
+
 #ifdef PROFILE_CB_TIME
     long long downsample_start_time = Timer::nanoTime();
     double filter_elapsed_time = (((double)(downsample_start_time - filter_start_time)) /
@@ -514,6 +539,17 @@ class TabletopPushingPerceptionNode
     // cv::Mat self_mask_down = downSample(self_mask, num_downsamples_);
     cv::pyrDown(color_frame, cur_color_frame_);
     cv::pyrDown(self_mask, cur_self_mask_);
+
+    no_objects = false;
+    ProtoObject cur_obj = obj_tracker_->findTargetObject(cur_color_frame_, cur_point_cloud_, no_objects, true);
+    
+    // Publish the object cloud only
+    sensor_msgs::PointCloud2 obj_cloud_msg;
+    pcl::toROSMsg(cur_obj.cloud, obj_cloud_msg);
+    obj_pcl_pub.publish(obj_cloud_msg);
+
+
+
 
 #ifdef PROFILE_CB_TIME
     long long tracker_start_time = Timer::nanoTime();
@@ -545,6 +581,9 @@ class TabletopPushingPerceptionNode
       PushTrackerState tracker_state;
       obj_tracker_->updateTracks(cur_color_frame_, cur_self_mask_, cur_self_filtered_cloud_, proxy_name_,
                                  tracker_state);
+
+      // Publish object cloud
+      obj_pcl_pub.publish(tracker_state.obj_cloud);
 
 #ifdef DEBUG_POSE_ESTIMATION
       pose_est_stream_ << tracker_state.x.x << " " << tracker_state.x.y << " " << tracker_state.z << " "
@@ -598,6 +637,12 @@ class TabletopPushingPerceptionNode
         long long write_dyn_start_time = Timer::nanoTime();
 #endif
         ProtoObject cur_obj = obj_tracker_->getMostRecentObject();
+
+        // Publish object cloud
+        sensor_msgs::PointCloud2 obj_cloud_msg;
+        pcl::toROSMsg(cur_obj.cloud, obj_cloud_msg);
+        obj_pcl_pub.publish(obj_cloud_msg);
+
         if (write_dyn_to_disk_)
         {
           // Write image and cur obj cloud
@@ -678,6 +723,7 @@ class TabletopPushingPerceptionNode
       PointStamped start_point;
       PointStamped end_point;
       PushTrackerState tracker_state = obj_tracker_->getMostRecentState();
+      obj_pcl_pub.publish(tracker_state.obj_cloud);
       start_point.header.frame_id = workspace_frame_;
       end_point.header.frame_id = workspace_frame_;
       start_point.point.x = tracker_state.x.x;
@@ -707,7 +753,7 @@ class TabletopPushingPerceptionNode
     if (use_displays_)
     {
       cv::imshow("color", cur_color_frame_);
-      // cv::imshow("self_mask", cur_self_mask_);
+      //cv::imshow("self_mask", cur_self_mask_);
     }
     // Way too much disk writing!
     if (write_input_to_disk_ && recording_input_)
@@ -907,6 +953,12 @@ class TabletopPushingPerceptionNode
         ROS_DEBUG_STREAM("Stopping input recording");
         recording_input_ = false;
         ProtoObject cur_obj = obj_tracker_->getMostRecentObject();
+      
+        // Publish the object cloud only
+        sensor_msgs::PointCloud2 obj_cloud_msg;
+        pcl::toROSMsg(cur_obj.cloud, obj_cloud_msg);
+        obj_pcl_pub.publish(obj_cloud_msg);
+
         if (cur_obj.cloud.header.frame_id.size() == 0)
         {
           ROS_INFO_STREAM("cur_obj.cloud.header.frame_id is blank, setting to workspace_frame_");
@@ -917,6 +969,7 @@ class TabletopPushingPerceptionNode
         cur_state.x.y = res.centroid.y;
         cur_state.x.theta = res.theta;
         cur_state.z = res.centroid.z;
+        cur_state.obj_cloud = obj_cloud_msg;
         if (req.analyze_previous)
         {
           // Display different color to signal swap available
@@ -2584,6 +2637,8 @@ class TabletopPushingPerceptionNode
   message_filters::Subscriber<sensor_msgs::Image> mask_sub_;
   message_filters::Subscriber<sensor_msgs::PointCloud2> cloud_sub_;
   ros::Publisher fpcl_pub; 
+  ros::Publisher obj_pcl_pub; 
+  ros::Publisher fobj_pcl_pub; 
   message_filters::Synchronizer<MySyncPolicy> sync_;
   sensor_msgs::CameraInfo cam_info_;
   shared_ptr<tf::TransformListener> tf_;
@@ -2599,6 +2654,7 @@ class TabletopPushingPerceptionNode
   cv::Mat morph_element_;
   XYZPointCloud cur_point_cloud_;
   XYZPointCloud cur_self_filtered_cloud_;
+  XYZPointCloud cur_object_filtered_cloud_;
   shared_ptr<PointCloudSegmentation> pcl_segmenter_;
   bool have_sensor_data_;
   int display_wait_ms_;

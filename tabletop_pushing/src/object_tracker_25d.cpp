@@ -115,6 +115,17 @@ ObjectTracker25D::ObjectTracker25D(shared_ptr<PointCloudSegmentation> segmenter,
   tmp_morph.copyTo(feature_point_morph_element_);
 }
 
+XYZPointCloud ObjectTracker25D::findTableMask(cv::Mat& in_frame, XYZPointCloud& cloud, 
+                                           cv::Mat self_mask, bool& no_objects, bool init)
+{
+      XYZPointCloud plane_cloud;
+      XYZPointCloud obj_cloud;
+      Eigen::Vector4f table_centroid_;
+      pcl_segmenter_->getTablePlane(cloud, obj_cloud, plane_cloud, table_centroid_, false/*init table*/, false, true);
+
+      return plane_cloud;
+}
+
 ProtoObject ObjectTracker25D::findTargetObjectGC(cv::Mat& in_frame, XYZPointCloud& cloud, cv::Mat& depth_frame,
                                                  cv::Mat self_mask, bool& no_objects, bool init)
 {
@@ -1292,6 +1303,9 @@ void ObjectTracker25D::initTracks(cv::Mat& in_frame, cv::Mat& self_mask, XYZPoin
   state.x_dot.x = 0.0;
   state.x_dot.y = 0.0;
   state.x_dot.theta = 0.0;
+  sensor_msgs::PointCloud2 testing_cloud_msg;
+  pcl::toROSMsg(previous_obj_.cloud, testing_cloud_msg); 
+  state.obj_cloud = testing_cloud_msg;
 
   ROS_DEBUG_STREAM("X: (" << state.x.x << ", " << state.x.y << ", " << state.z << ", " << state.x.theta << ")");
   ROS_DEBUG_STREAM("X_dot: (" << state.x_dot.x << ", " << state.x_dot.y << ", " << state.x_dot.theta << ")\n");
@@ -1351,6 +1365,8 @@ void ObjectTracker25D::updateTracks(cv::Mat& in_frame, cv::Mat& self_mask,
     state.x = previous_state_.x;
     state.x_dot = previous_state_.x_dot;
     state.z = previous_state_.z;
+    state.obj_cloud = previous_state_.obj_cloud;
+
     ROS_WARN_STREAM("Using previous state, but updating time!");
     if (use_displays_ || write_to_disk_)
     {
@@ -1377,6 +1393,8 @@ void ObjectTracker25D::updateTracks(cv::Mat& in_frame, cv::Mat& self_mask,
     state.header.seq = frame_count_;
     state.header.stamp = cloud.header.stamp;
     state.header.frame_id = cloud.header.frame_id;
+    // Store off the object cloud
+    state.obj_cloud = previous_state_.obj_cloud;
     // Estimate dynamics and do some bookkeeping
     double delta_x = state.x.x - previous_state_.x.x;
     double delta_y = state.x.y - previous_state_.x.y;

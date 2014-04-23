@@ -45,6 +45,7 @@ import sys
 from select import select
 from push_learning import PushLearningIO
 from geometry_msgs.msg import Pose2D
+from geometry_msgs.msg import Pose
 import time
 import random
 import math
@@ -133,6 +134,7 @@ class TabletopExecutive:
              # Added in simple push service
             self.gripper_simple_push_proxy = rospy.ServiceProxy(
                 'gripper_simple_push', FeedbackPush)
+
         self.table_proxy = rospy.ServiceProxy('get_table_location', LocateTable)
         self.learn_io = None
 
@@ -174,7 +176,7 @@ class TabletopExecutive:
             rospy.loginfo('Opening learn file: '+learn_file_name)
             self.learn_io.open_out_file(learn_file_name)
 
-    def init_object_poses(self, a=18, r=0.6, zs=1):
+    def init_object_poses(self, a=18, r=0.2, zs=1):
 
         # create dictionary for poses
         self.poses = dict()
@@ -247,7 +249,7 @@ class TabletopExecutive:
                 return 'quit'
             init_pose = self.get_feedback_push_initial_obj_pose()
         #goal_pose = self.generate_random_table_pose(init_pose)
-        goal_pose = self.generate_random_table_pose(2, init_pose)
+        goal_pose = self.generate_random_table_pose(self.run_num, init_pose)
 
         restart_count = 0
         done_with_push = False
@@ -417,6 +419,11 @@ class TabletopExecutive:
             result = self.gripper_feedback_push_object(which_arm,
                                                        push_vector_res, goal_pose,
                                                        controller_name, proxy_name, behavior_primitive)
+        elif (behavior_primitive == SIMPLE_PUSH):
+            result = self.gripper_simple_push_object(which_arm,
+                                                       push_vector_res, goal_pose,
+                                                       controller_name, proxy_name, behavior_primitive)
+            
         else:
             rospy.logwarn('Unknown behavior_primitive: ' + str(behavior_primitive))
             result = None
@@ -554,6 +561,70 @@ class TabletopExecutive:
         raise_req.point_head_only = False
         raise_req.init_arms = init_arms
         raise_res = self.raise_and_look_proxy(raise_req)
+    
+    def gripper_simple_push_object(self, which_arm, learn_push_res, goal_pose, controller_name,
+                                     proxy_name, behavior_primitive, high_init=True, open_gripper=False):
+        # Convert pose response to correct push request format
+        push_req = FeedbackPushRequest()
+        push_vector = learn_push_res.push
+        push_req.obj_start_pose.x = learn_push_res.centroid.x
+        push_req.obj_start_pose.y = learn_push_res.centroid.y
+        push_req.obj_start_pose.theta = learn_push_res.theta
+        push_req.start_point.header = push_vector.header
+        push_req.start_point.point = push_vector.start_point
+        push_req.open_gripper = open_gripper
+        push_req.goal_pose = goal_pose
+        push_req.check_model_performance = self.check_model_performance
+        if _USE_LEARN_IO:
+            push_req.learn_out_file_name = self.learn_out_file_name
+
+        # Use the sent wrist yaw
+        wrist_yaw = push_vector.push_angle
+        push_req.wrist_yaw = wrist_yaw
+        # Offset pose to not hit the object immediately
+        if behavior_primitive == GRIPPER_PULL:
+            offset_dist = self.gripper_pull_offset_dist
+            start_z = self.gripper_pull_start_z
+        elif behavior_primitive == PINCHER_PUSH:
+            offset_dist = self.pincher_offset_dist
+            start_z = self.pincher_start_z
+            push_req.open_gripper = True
+        else:
+            offset_dist = self.gripper_offset_dist
+            start_z = self.gripper_start_z
+
+        rospy.loginfo('Gripper push pre-augmented start_point: (' +
+                      str(push_req.start_point.point.x) + ', ' +
+                      str(push_req.start_point.point.y) + ', ' +
+                      str(push_req.start_point.point.z) + ')')
+
+        push_req.start_point.point.x += -offset_dist*cos(wrist_yaw)
+        push_req.start_point.point.y += -offset_dist*sin(wrist_yaw)
+        push_req.start_point.point.z = start_z
+        push_req.left_arm = (which_arm == 'l')
+        push_req.right_arm = not push_req.left_arm
+        push_req.high_arm_init = high_init
+        push_req.controller_name = controller_name
+        push_req.proxy_name = proxy_name
+        push_req.behavior_primitive = behavior_primitive
+
+        rospy.loginfo('Gripper push augmented start_point: (' +
+                      str(push_req.start_point.point.x) + ', ' +
+                      str(push_req.start_point.point.y) + ', ' +
+                      str(push_req.start_point.point.z) + ')')
+
+        rospy.loginfo("Calling gripper feedback pre push service")
+        pre_push_res = self.gripper_feedback_pre_push_proxy(push_req)
+
+        rospy.loginfo("Calling gripper simple push service")
+        push_res = FeedbackPushResponse()
+        push_res = self.gripper_simple_push_proxy(push_req)
+
+        rospy.loginfo("Calling gripper feedback post push service")
+        post_push_res = self.gripper_feedback_post_push_proxy(push_req)
+        
+        return push_res
+
 
     def gripper_feedback_push_object(self, which_arm, learn_push_res, goal_pose, controller_name,
                                      proxy_name, behavior_primitive, high_init=True, open_gripper=False):
@@ -673,7 +744,7 @@ class TabletopExecutive:
         goal_pose.y = dict_pos[1]
         goal_pose.theta = 0
 
-        return (goal_pose, dict_pos[2])
+        return goal_pose
 
     def generate_random_table_pose_old(self, init_pose=None):
         if _USE_FIXED_GOAL or self.start_loc_use_fixed_goal:
@@ -766,6 +837,7 @@ if __name__ == '__main__':
         else:
             for i in xrange(num_trials_per_object):
                 node.start_loc_use_fixed_goal = False
+                node.run_num = i+1
                 previous_id = code_in
                 rospy.loginfo('Running push exploration round ' + str(i) + ' for object ' + previous_id)
                 clean_exploration = node.run_push_exploration(object_id=code_in)

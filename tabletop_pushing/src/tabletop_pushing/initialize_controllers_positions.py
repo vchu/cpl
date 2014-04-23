@@ -494,7 +494,44 @@ class InitializePositionControllerNode:
         else:
             which_arm = 'r'
 
-        import pdb; pdb.set_trace()
+        goal_point = request.goal_pose
+
+        # Convert the object into the frame of the move_it planner
+        # TODO: Rmove this hack and maybe make it a param?
+        (new_trans, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
+                                                            'torso_lift_link',
+                                                            rospy.Time(0))
+        goal_pose = PoseStamped()
+        goal_pose.header = request.start_point.header
+        goal_pose.pose.position.x = goal_point.x + new_trans[0]
+        goal_pose.pose.position.y = goal_point.y + new_trans[1]
+        #goal_pose.pose.position.z = goal_point.z + new_trans[2] + 0.1
+        goal_pose.pose.position.z = start_point.z + new_trans[2] + 0.1
+
+        wrist_pitch = 0.0625*pi
+        q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
+        goal_pose.pose.orientation.x = q[0]
+        goal_pose.pose.orientation.y = q[1]
+        goal_pose.pose.orientation.z = q[2]
+        goal_pose.pose.orientation.w = q[3]
+
+        # TODO: Make gripper open dist a parameter
+        # Later can use for opening or closing the hand
+        '''
+            if request.open_gripper:
+                res = robot_gripper.open(block=True, position=0.05)
+            if is_pull:
+                res = robot_gripper.open(block=True, position=0.9)
+        '''
+
+        # Move to goal pose
+        self.move_to_cart_pose(goal_pose, which_arm)
+        response.failed_position = False
+
+        rospy.loginfo('Done moving to goal point')
+        self.use_gripper_place_joint_posture = False
+
+        return response
 
     def feedback_push_behavior(self, request, feedback_cb):
         response = FeedbackPushResponse()

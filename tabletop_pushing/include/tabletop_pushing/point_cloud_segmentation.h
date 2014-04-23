@@ -80,12 +80,14 @@ class ProtoObject
   std::vector<int> push_history;
   bool singulated;
   double icp_score;
+
 };
 typedef std::deque<ProtoObject> ProtoObjects;
 
 class PointCloudSegmentation
 {
  public:
+
   PointCloudSegmentation(boost::shared_ptr<tf::TransformListener> tf);
 
   /**

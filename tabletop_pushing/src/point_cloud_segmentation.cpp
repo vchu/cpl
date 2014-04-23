@@ -68,7 +68,7 @@
 #include <tabletop_pushing/extern/Timer.hpp>
 
 // Debugging IFDEFS
-// #define DISPLAY_CLOUD_DIFF 1
+#define DISPLAY_CLOUD_DIFF 1
 // #define PROFILE_OBJECT_SEGMENTATION_TIME 1
 // #define PROFILE_TABLE_SEGMENTATION_TIME 1
 // #define PROFILE_OBJECT_CLUSTER_TIME 1
@@ -93,6 +93,7 @@ PointCloudSegmentation::PointCloudSegmentation(boost::shared_ptr<tf::TransformLi
     rand_color[2] = randf();
     colors_.push_back(rand_color);
   }
+
 }
 
 void PointCloudSegmentation::getTablePlane(XYZPointCloud& cloud, XYZPointCloud& objs_cloud,
@@ -503,6 +504,7 @@ void PointCloudSegmentation::clusterProtoObjects(XYZPointCloud& objects_cloud, P
     po.singulated = false;
     objs.push_back(po);
   }
+
 #ifdef PROFILE_OBJECT_CLUSTER_TIME
   double cluster_objects_elapsed_time = (((double)(Timer::nanoTime() - cluster_objects_start_time)) /
                                          Timer::NANOSECONDS_PER_SECOND);
