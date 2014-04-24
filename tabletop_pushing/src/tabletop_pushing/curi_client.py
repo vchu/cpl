@@ -40,7 +40,7 @@ import rospy
 import sys, time, os
 import math, numpy as np
 import time
-from geometry_msgs.msg import Wrench, Twist, Vector3
+from geometry_msgs.msg import Wrench, Twist, Vector3, Pose
 from m3ctrl_msgs.msg import M3JointCmd
 from sensor_msgs.msg import JointState
 import threading
@@ -275,14 +275,9 @@ class DarciClient():
             rospy.loginfo("Given an invalid body part to plan: %d" % body_part)
             return None
 
-        import pdb; pdb.set_trace()
-
-        # Set just the position of the target currently
-        # TODO: Fix the orientation
-        group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
-
         #if post:
         if False:
+            '''
             limit_wrist = Constraints()
             limit_wrist.name = "limit wrist"
             wrist_constraint = PositionConstraint()
@@ -296,40 +291,63 @@ class DarciClient():
             wrist_constraint.weight = 1.0
             limit_wrist.position_constraints.append(wrist_constraint)
             group.set_path_constraints(limit_wrist)
-        
-        #group.set_pose_target(poseMsg.pose)
-        # Add constraint to not allow the orientation to change?
-        '''
-        limit_wrist = Constraints()
-        limit_wrist.name = "limit wrist"
-        wrist_orientation_constraint = OrientationConstraint()
-        wrist_orientation_constraint.header = poseMsg.header
-        wrist_orientation_constraint.link_name = group.get_end_effector_link()
-        wrist_orientation_constraint.orientation = poseMsg.pose.orientation # setting goal orientation
-        wrist_orientation_constraint.absolute_x_axis_tolerance = 0.08 # ignore errors in the x-axis
-        wrist_orientation_constraint.absolute_y_axis_tolerance = 0.08 # ignore errors in the y-axis
-        wrist_orientation_constraint.absolute_z_axis_tolerance = 3.14 # enforce z-axis orientation
-        wrist_orientation_constraint.weight = 1.0
-        limit_wrist.orientation_constraints.append(wrist_orientation_constraint)
-        group.set_path_constraints(limit_wrist)
-        '''
-        # Remove collision object?
-        # collision_object = moveit_msgs.msg.
-    
-        # Init vars
-        plan = RobotTrajectory()
-        count = 1
-        # Plan until we get a result - only 25 iterations currently
-        while plan.joint_trajectory.points == [] and count < 20:
-            print "Planning"
-            plan = group.plan()
+            '''
 
-            # Actually excecute action
-            group.execute(plan)
+            # Using cartesian paths.  Currently do not need for
+            # just one point.  Maybe later for actual pushing vector?
+            # We want to go in a straight line...
+            # start with the current pose
+            waypoints = []
+            waypoints.append(group.get_current_pose().pose)
+            wpose = Pose()
+            wpose.orientation.w = 1.0
+            wpose.position.x = poseMsg.pose.position.x
+            wpose.position.y = poseMsg.pose.position.y
+            wpose.position.z = poseMsg.pose.position.z
+            waypoints.append(copy.deepcopy(wpose))
 
-            # Keep track of attempts
-            count = count + 1
-            rospy.loginfo("Plan attempt: %d" % count)
+            eef_step = .01
+            jump_thresh = 0
+            avoid_collisions = True
+            count = 0 
+            best_fraction = 0
+            fraction = 0
+            best_plan = None
+            while fraction < 0.9 and count < 30:
+                (plan, fraction) = group.compute_cartesian_path(
+                                         waypoints,   # waypoints to follow
+                                         eef_step,        # eef_step
+                                         jump_thresh,   # jump_threshold
+                                         avoid_collisions)         # collisions
+                if fraction > best_fraction:
+                    best_plan = plan
+                    best_fraction = fraction
+
+                count = count + 1
+
+            # Set the found best plan
+            plan = best_plan
+
+        else: 
+            # Set just the position of the target currently
+            # TODO: Fix the orientation
+            group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
+
+            # Init vars
+            plan = RobotTrajectory()
+            count = 1
+
+            # Plan until we get a result - only 25 iterations currently
+            while plan.joint_trajectory.points == [] and count < 20:
+                print "Planning"
+                plan = group.plan()
+
+                # Keep track of attempts
+                rospy.loginfo("Plan attempt: %d" % count)
+                count = count + 1
+
+        # Actually excecute action
+        group.execute(plan)
         
         # return the plan
         return plan
