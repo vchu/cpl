@@ -331,6 +331,7 @@ class DarciClient():
         else: 
             # Set just the position of the target currently
             # TODO: Fix the orientation
+            import pdb; pdb.set_trace()
             group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
 
             # Init vars

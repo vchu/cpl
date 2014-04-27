@@ -201,11 +201,15 @@ typedef std::priority_queue<DynScore, std::vector<DynScore>, DynScoreComparison>
 class TabletopPushingPerceptionNode
 {
  public:
+  
   TabletopPushingPerceptionNode(ros::NodeHandle &n) :
       n_(n), n_private_("~"),
-      image_sub_(n, "color_image_topic", 1),
-      mask_sub_(n, "mask_image_topic", 1),
-      cloud_sub_(n, "point_cloud_topic", 1),
+      //image_sub_(n, "color_image_topic", 1),
+      //mask_sub_(n, "mask_image_topic", 1),
+      //cloud_sub_(n, "point_cloud_topic", 1),
+      image_sub_(n, "/asus/rgb/image_raw", 1),
+      mask_sub_(n, "/asus/rgb/image_raw/self_mask", 1),
+      cloud_sub_(n, "/asus/depth_registered/points", 1),
       sync_(MySyncPolicy(15), image_sub_, mask_sub_, cloud_sub_),
       as_(n, "push_tracker", false),
       have_sensor_data_(false),
@@ -226,6 +230,7 @@ class TabletopPushingPerceptionNode
     tf_ = shared_ptr<tf::TransformListener>(new tf::TransformListener());
     pcl_segmenter_ = shared_ptr<PointCloudSegmentation>(
         new PointCloudSegmentation(tf_));
+
     // Get parameters from the server
     n_private_.param("display_wait_ms", display_wait_ms_, 3);
     n_private_.param("use_displays", use_displays_, false);
@@ -233,12 +238,12 @@ class TabletopPushingPerceptionNode
     n_private_.param("write_to_disk", write_to_disk_, false);
     n_private_.param("write_dyn_learning_to_disk", write_dyn_to_disk_, false);
 
-    n_private_.param("min_workspace_x", pcl_segmenter_->min_workspace_x_, 0.0);
-    n_private_.param("max_workspace_x", pcl_segmenter_->max_workspace_x_, 0.0);
-    n_private_.param("min_workspace_y", pcl_segmenter_->min_workspace_y_, 0.0);
-    n_private_.param("max_workspace_y", pcl_segmenter_->min_workspace_y_, 0.0);
-    n_private_.param("min_workspace_z", pcl_segmenter_->min_workspace_z_, 0.0);
-    n_private_.param("max_workspace_z", pcl_segmenter_->max_workspace_z_, 0.0);
+    n_private_.param("min_workspace_x", pcl_segmenter_->min_workspace_x_, -1.0);
+    n_private_.param("max_workspace_x", pcl_segmenter_->max_workspace_x_, 1.5);
+    n_private_.param("min_workspace_y", pcl_segmenter_->min_workspace_y_, -1.0);
+    n_private_.param("max_workspace_y", pcl_segmenter_->max_workspace_y_, 1.5);
+    n_private_.param("min_workspace_z", pcl_segmenter_->min_workspace_z_, -1.0);
+    n_private_.param("max_workspace_z", pcl_segmenter_->max_workspace_z_, 1.5);
 
     n_private_.param("min_table_z", pcl_segmenter_->min_table_z_, -0.5);
     n_private_.param("max_table_z", pcl_segmenter_->max_table_z_, 1.5);
@@ -256,7 +261,8 @@ class TabletopPushingPerceptionNode
     std::string default_workspace_frame = "torso_lift_link";
     n_private_.param("workspace_frame", workspace_frame_,
                      default_workspace_frame);
-    std::string default_camera_frame = "head_mount_kinect_rgb_optical_frame";
+    //std::string default_camera_frame = "head_mount_kinect_rgb_optical_frame";
+    std::string default_camera_frame = "rgb_camera_link";
     n_private_.param("camera_frame", camera_frame_, default_camera_frame);
 
     std::string output_path_def = "~";
@@ -267,7 +273,8 @@ class TabletopPushingPerceptionNode
     n_private_.param("num_downsamples", num_downsamples_, 2);
     pcl_segmenter_->num_downsamples_ = num_downsamples_;
 
-    std::string cam_info_topic_def = "/kinect_head/rgb/camera_info";
+    //std::string cam_info_topic_def = "/kinect_head/rgb/camera_info";
+    std::string cam_info_topic_def = "/asus/rgb/camera_info";
     n_private_.param("cam_info_topic", cam_info_topic_, cam_info_topic_def);
 
     // PCL Segmentation parameters
@@ -424,16 +431,52 @@ class TabletopPushingPerceptionNode
     long long cb_start_time = Timer::nanoTime();
 #endif
 
+    // create a custom message if needed
+    if (cloud_msg->height == 1){
+        sensor_msgs::PointCloud2 new_cloud_msg;
+        new_cloud_msg.header = cloud_msg->header;
+        new_cloud_msg.height = 480; 
+        new_cloud_msg.width = 640; 
+        new_cloud_msg.fields = cloud_msg->fields;
+        new_cloud_msg.is_bigendian = cloud_msg->is_bigendian;
+        new_cloud_msg.point_step = cloud_msg->point_step;
+        new_cloud_msg.row_step = 20480;
+        new_cloud_msg.data = cloud_msg->data;
+        new_cloud_msg.is_dense = cloud_msg->is_dense;
+
+        pcl::fromROSMsg(new_cloud_msg, cur_point_cloud_);
+
+    } else {
+        pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
+    }    
+    // Give tf some time to initialize()
+    //ros::Duration(5.0).sleep();
+
+    // Transform point cloud into the correct frame and convert to PCL struct
+    //pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
+    if (!tf_->waitForTransform(workspace_frame_, cloud_msg->header.frame_id, cloud_msg->header.stamp,
+                          ros::Duration(0.5)))
+    {
+        ROS_INFO_STREAM(ros::Time::now());
+        ROS_ERROR("Could not get transform from %s to %s", workspace_frame_.c_str(), cloud_msg->header.frame_id.c_str());
+        ROS_ERROR("Ignore error if this occurs only once...");
+        return;
+    }
+    
+    pcl_ros::transformPointCloud(workspace_frame_, cur_point_cloud_, cur_point_cloud_, *tf_);
+
+
     if (!camera_initialized_)
     {
       cam_info_ = *ros::topic::waitForMessage<sensor_msgs::CameraInfo>(
-          cam_info_topic_, n_, ros::Duration(5.0));
+          cam_info_topic_, n_, ros::Duration(0.5));
       camera_initialized_ = true;
       have_sensor_data_ = true;
       pcl_segmenter_->cam_info_ = cam_info_;
       pcl_segmenter_->cur_camera_header_ = img_msg->header;
       ROS_DEBUG_STREAM("Cam info: " << cam_info_);
     }
+
     // Convert images to OpenCV format
     cv::Mat color_frame;
     cv::Mat self_mask;
@@ -456,30 +499,6 @@ class TabletopPushingPerceptionNode
                                      Timer::NANOSECONDS_PER_SECOND);
 #endif
 
-    // create a custom message if needed
-    if (cloud_msg->height == 1){
-        sensor_msgs::PointCloud2 new_cloud_msg;
-        new_cloud_msg.header = cloud_msg->header;
-        new_cloud_msg.height = 480; 
-        new_cloud_msg.width = 640; 
-        new_cloud_msg.fields = cloud_msg->fields;
-        new_cloud_msg.is_bigendian = cloud_msg->is_bigendian;
-        new_cloud_msg.point_step = cloud_msg->point_step;
-        new_cloud_msg.row_step = 20480;
-        new_cloud_msg.data = cloud_msg->data;
-        new_cloud_msg.is_dense = cloud_msg->is_dense;
-
-        pcl::fromROSMsg(new_cloud_msg, cur_point_cloud_);
-
-    } else {
-        pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
-    }    
-
-    // Transform point cloud into the correct frame and convert to PCL struct
-    //pcl::fromROSMsg(*cloud_msg, cur_point_cloud_);
-    tf_->waitForTransform(workspace_frame_, cloud_msg->header.frame_id, cloud_msg->header.stamp,
-                          ros::Duration(0.5));
-    pcl_ros::transformPointCloud(workspace_frame_, cur_point_cloud_, cur_point_cloud_, *tf_);
 
 #ifdef PROFILE_CB_TIME
     long long filter_start_time = Timer::nanoTime();
@@ -660,6 +679,7 @@ class TabletopPushingPerceptionNode
           if (feedback_control_count_ == 0)
           {
             tf::StampedTransform workspace_to_cam_t;
+            ROS_INFO_STREAM("GOT HERE");
             tf_->lookupTransform(camera_frame_, workspace_frame_, ros::Time(0), workspace_to_cam_t);
             std::stringstream workspace_to_cam_name, cam_info_name;
             workspace_to_cam_name << base_output_path_ << "workspace_to_cam_"
