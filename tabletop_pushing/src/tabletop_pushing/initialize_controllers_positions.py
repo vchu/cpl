@@ -72,12 +72,16 @@ _FORCE_SINGLE_SQP_SOLVE = False
 # Curi Setup joints
 _ARM_POSITIONS = {
     'zero_position' : [0.0]*7,
+    'right_arm_ready' : [-1.365, 0.3388, -0.0586, 2.005, 2.0, 0.293, -1.047],
+    'left_arm_ready' : [-1.365, -0.3388, 0.0586, 2.005, -2.0, 0.293, 1.047],
+    'right_arm_high_return' : [1.764, 1.959, -1.332, 1.592, 3.047, -0.292, 0.635],
+    'left_arm_high_return' : [1.764, -1.959, 1.332, 1.592, -3.047, -0.292, -0.635],
     'aright_arm_ready' : [0.0, 1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
     'aleft_arm_ready' : [0.0, -1.557, 0.0, 0.0, 0.0, 0.0, 0.0],
     'high_right_arm_ready' : [0.007, 1.951, -1.136, 1.97, 1.655, 0.06, 0.088],
     'high_left_arm_ready' : [0.007, -1.951, 1.136, 1.97, -1.655, 0.06, 0.088],
-    'right_arm_ready' : [-0.755, 0.543, 0.646, 2.12, 0.014, 0.0, 0.0],
-    'left_arm_ready' : [-0.755, -0.543, -0.646, 2.12, 0.014, 0.0, 0.0],
+    'stump_right_arm_ready' : [-0.755, 0.543, 0.646, 2.12, 0.014, 0.0, 0.0],
+    'stump_left_arm_ready' : [-0.755, -0.543, -0.646, 2.12, 0.014, 0.0, 0.0],
     'old_right_arm_ready' : [0.0, 1.157, 0.0, 1.766, 0.0, 0.0, 0.0],
     'old_arm_ready' : [0.0, -1.157, 0.0, 1.766, 0.0, 0.0, 0.0]
     }
@@ -412,17 +416,43 @@ class InitializePositionControllerNode:
         res = robot_gripper.close(block=True, effort=self.max_close_effort)
         rospy.loginfo('Closed %s_gripper' % which_arm)
         '''
-
-    def reset_arm_pose(self, force_ready=False, which_arm='l',
-                       high_arm_joints=False):
+    def reset_arm_pose_end(self, which_arm='l', high_ready=False):
         '''
         Move the arm to the initial pose to be out of the way for viewing the
         tabletop - same as init_arm_pose for now?
         '''
         if which_arm == 'l':
-            setup_joints = _ARM_POSITIONS['left_arm_ready']
+            if high_ready:
+                setup_joints = _ARM_POSITIONS['left_arm_high_return']
+            else:
+                setup_joints = _ARM_POSITIONS['left_arm_ready']
         else:
-            setup_joints = _ARM_POSITIONS['right_arm_ready']
+            if high_ready:
+                setup_joints = _ARM_POSITIONS['right_arm_high_return']
+            else:
+                setup_joints = _ARM_POSITIONS['right_arm_ready']
+
+        rospy.logdebug('Moving %s_arm to setup pose' % which_arm)
+        self.set_arm_joint_pose(setup_joints, which_arm, nsecs=1.5)
+        rospy.logdebug('Moved %s_arm to setup pose' % which_arm)
+
+
+    def reset_arm_pose(self, force_ready=False, which_arm='l',
+                       high_arm_joints=False, high_ready=False):
+        '''
+        Move the arm to the initial pose to be out of the way for viewing the
+        tabletop - same as init_arm_pose for now?
+        '''
+        if which_arm == 'l':
+            if high_ready:
+                setup_joints = _ARM_POSITIONS['left_arm_high_return']
+            else:
+                setup_joints = _ARM_POSITIONS['left_arm_ready']
+        else:
+            if high_ready:
+                setup_joints = _ARM_POSITIONS['right_arm_high_return']
+            else:
+                setup_joints = _ARM_POSITIONS['right_arm_ready']
 
         rospy.logdebug('Moving %s_arm to setup pose' % which_arm)
         self.set_arm_joint_pose(setup_joints, which_arm, nsecs=1.5)
@@ -481,6 +511,22 @@ class InitializePositionControllerNode:
         feedback_cb = None
         return self.simple_push_behavior(request, feedback_cb)
 
+    def find_curi_push_pose(self, wrist_yaw, which_arm):
+
+        if which_arm == 'l':
+            wrist_roll = -pi/2
+            wrist_yaw_new = pi+wrist_yaw
+        else:
+            wrist_roll = pi/2 
+            #wrist_yaw_new = (pi/2)-wrist_yaw
+            wrist_yaw_new = wrist_yaw-pi
+
+        #import pdb; pdb.set_trace()
+
+        wrist_pitch = 0 # don't pitch for Curi
+        q = tf.transformations.quaternion_from_euler(wrist_roll, wrist_pitch, wrist_yaw_new)
+        return q 
+
     def simple_push_behavior(self, request, feedback_cb):
         response = FeedbackPushResponse()
         start_point = request.start_point.point
@@ -506,8 +552,9 @@ class InitializePositionControllerNode:
         # Check which "height" we're doing
         goal_pose.pose.position.z = start_point.z + new_trans[2]
 
-        wrist_pitch = 0.0625*pi
-        q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
+        #wrist_pitch = 0.0625*pi
+        #q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
+        q = self.find_curi_push_pose(wrist_yaw, which_arm)
         goal_pose.pose.orientation.x = q[0]
         goal_pose.pose.orientation.y = q[1]
         goal_pose.pose.orientation.z = q[2]
@@ -1051,30 +1098,41 @@ class InitializePositionControllerNode:
 
         if request.left_arm:
             (pos, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
-                                                                'handmount_LEFT',
+                                                                'gcp_LEFT',
                                                                 rospy.Time(0))
 
             which_arm = 'l'
         else:
             (pos, rot) = self.tf_listener.lookupTransform(self.base_frame_name,
-                                                                'handmount_RIGHT',
+                                                                'gcp_RIGHT',
                                                                 rospy.Time(0))
             which_arm = 'r'
 
-        rospy.logdebug('Moving up to end point')
+        self.reset_arm_pose_end(which_arm=which_arm, high_ready=True)
+
+        # Allow a little bit of time to finish
+        rospy.sleep(1.0)
+
+        '''
+        rospy.logdebug('Moving up to final end point')
         wrist_yaw = request.wrist_yaw
         end_pose = PoseStamped()
         end_pose.header = request.start_point.header
 
-        end_pose.pose.position.x = pos[0]
+        end_pose.pose.position.x = pos[0] - 0.05
         end_pose.pose.position.y = pos[1]
-        end_pose.pose.position.z = pos[2] + 0.1 # Just move the arm up
+        end_pose.pose.position.z = pos[2] + 0.2# Just move the arm up
+
+        q = self.find_curi_push_pose(wrist_yaw)
+        end_pose.pose.orientation.x = q[0]
+        end_pose.pose.orientation.y = q[1]
+        end_pose.pose.orientation.z = q[2]
+        end_pose.pose.orientation.w = q[3]
 
         self.move_to_cart_pose(end_pose, which_arm)
-
+        '''
+        #self.reset_arm_pose(True, which_arm, request.high_arm_init)
         rospy.loginfo('Done moving up to end point')
-
-        self.reset_arm_pose(True, which_arm, request.high_arm_init)
         return response
 
     #
@@ -1095,6 +1153,7 @@ class InitializePositionControllerNode:
             which_arm = 'r'
             #robot_gripper = self.robot.right_gripper
 
+
         self.set_arm_joint_pose(ready_joints, which_arm, nsecs=1.5)
         rospy.logdebug('Moving %s_arm to ready pose' % which_arm)
 
@@ -1110,8 +1169,11 @@ class InitializePositionControllerNode:
         start_pose.pose.position.z = start_point.z + new_trans[2]
         #start_pose.pose.position.z = start_point.z + new_trans[2] + 0.08
 
-        wrist_pitch = 0.0625*pi
-        q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
+        #wrist_pitch = 0.0625*pi
+        #q = tf.transformations.quaternion_from_euler(0.0, wrist_pitch, wrist_yaw)
+        #wrist_pitch = 0 # don't pitch for Curi
+        #q = tf.transformations.quaternion_from_euler(-pi/2, wrist_pitch, pi+wrist_yaw)
+        q = self.find_curi_push_pose(wrist_yaw, which_arm)
         start_pose.pose.orientation.x = q[0]
         start_pose.pose.orientation.y = q[1]
         start_pose.pose.orientation.z = q[2]

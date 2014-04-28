@@ -331,15 +331,17 @@ class DarciClient():
         else: 
             # Set just the position of the target currently
             # TODO: Fix the orientation
-            import pdb; pdb.set_trace()
-            group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
+            #import pdb; pdb.set_trace()
+            #group.set_position_target([poseMsg.pose.position.x,poseMsg.pose.position.y,poseMsg.pose.position.z])
+
+            group.set_pose_target(poseMsg.pose)
 
             # Init vars
             plan = RobotTrajectory()
             count = 1
 
             # Plan until we get a result - only 25 iterations currently
-            while plan.joint_trajectory.points == [] and count < 20:
+            while plan.joint_trajectory.points == [] and count < 5:
                 print "Planning"
                 plan = group.plan()
 

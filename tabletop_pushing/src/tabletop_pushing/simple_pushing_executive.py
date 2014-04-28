@@ -80,7 +80,7 @@ class TabletopExecutive:
         self.use_same_side_y_thresh = rospy.get_param('~use_same_side_y_thresh', 0.3)
         self.use_same_side_x_thresh = rospy.get_param('~use_same_side_x_thresh', 0.8)
 
-        self.gripper_offset_dist = rospy.get_param('~gripper_push_offset_dist', 0.07)
+        self.gripper_offset_dist = rospy.get_param('~gripper_push_offset_dist', 0.02)
         self.gripper_start_z = rospy.get_param('~gripper_push_start_z', -0.29)
 
         self.pincher_offset_dist = rospy.get_param('~pincher_push_offset_dist', 0.05)
@@ -191,7 +191,7 @@ class TabletopExecutive:
             rospy.loginfo('Opening learn file: '+learn_file_name)
             self.learn_io.open_out_file(learn_file_name)
 
-    def init_object_poses(self, a=18, r=0.05, zs=1):
+    def init_object_poses(self, a=18, r=0.05, zs=1, flip=False, shift=False):
 
         # create dictionary for poses
         self.poses = dict()
@@ -208,6 +208,10 @@ class TabletopExecutive:
                 x = r*math.sin((i+1)*rad_a)+ 0.4  
                 y = -r*math.cos((i+1)*rad_a)     
                 z = j
+                if flip:
+                    x = -r*math.sin((i+1)*rad_a)+ 0.3  
+                if shift:
+                    y = y + 0.3
                 self.poses[i+1] = (x,y,z)
 
     def finish_learning(self):
@@ -622,7 +626,8 @@ class TabletopExecutive:
         self.object_info_pub.publish(push_vec_res_obj.size) 
 
         # Create z_offset for the gripper
-        z_offset = 0.07 # Experimentally obtained in simulation
+        #z_offset = 0.7 # Experimentally obtained in simulation - without hand
+        z_offset = 0.1 # Experimentally obtained in simulation
 
         obj_height = push_vec_res_obj.size.y # height of object
         explore_height = obj_height/self.zs # how much to increment in Z
@@ -773,9 +778,9 @@ class TabletopExecutive:
         post_push_res = self.gripper_post_push_proxy(push_req)
 
     def out_of_workspace(self, init_pose):
-        return (init_pose.x < self.min_workspace_x or init_pose.x > self.max_workspace_x or
-                init_pose.y < self.min_workspace_y or init_pose.y > self.max_workspace_y)
-
+        #return (init_pose.x < self.min_workspace_x or init_pose.x > self.max_workspace_x or
+        #        init_pose.y < self.min_workspace_y or init_pose.y > self.max_workspace_y)
+        return 0
 
     # Have to call it this (something else must call out from service)
     def generate_random_table_pose(self, position_num, init_pose=None):
@@ -867,7 +872,9 @@ if __name__ == '__main__':
     node.check_model_performance = check_model_performance
 
     # init object poses
-    node.init_object_poses()
+    #node.init_object_poses()
+    node.init_object_poses(flip=True)
+    #node.init_object_poses(shift=True)
 
     # Run the simple learning mode to push
     running = True
@@ -885,6 +892,9 @@ if __name__ == '__main__':
                 rospy.loginfo('Running push exploration round ' + str(i) + ' for object ' + previous_id)
                 # Clear gazebo
                 node.gazebo_reset_world()
+
+                # Pause a bit after resetting the world
+                rospy.sleep(1.0)
 
                 # Start recording after we reset world
                 node.data_logger.publish(Bool(True))
