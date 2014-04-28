@@ -19,6 +19,7 @@ bool compare_shape_for_dynamics
 tabletop_pushing/PushVector push
 geometry_msgs/Point centroid
 geometry_msgs/Pose2D goal_pose
+geometry_msgs/Pose2D size
 float64 theta
 bool no_push
 bool no_objects
